@@ -27,5 +27,5 @@ First milestone. Auth + reverse proxy + sample API working end-to-end. No dashbo
 - Session cookies are encrypted with `SESSION_SECRET` (≥32 chars enforced at module load).
 - Server actions on `/login` enforce same-origin posts (Next.js built-in).
 
-[Unreleased]: https://github.com/OWNER/Onecodebase/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/OWNER/Onecodebase/releases/tag/v0.1.0
+[Unreleased]: https://github.com/OneCodeApS/Onecodebase/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/OneCodeApS/Onecodebase/releases/tag/v0.1.0

@@ -55,9 +55,9 @@ jobs:
             exit 0
           fi
 
-          # Refuse to release from a non-main branch.
-          if [ "${{ github.ref }}" != "refs/heads/main" ]; then
-            echo "::error::Releases must run from main. Current ref: ${{ github.ref }}"
+          # Refuse to release from a non-default branch.
+          if [ "${{ github.ref }}" != "refs/heads/master" ]; then
+            echo "::error::Releases must run from master. Current ref: ${{ github.ref }}"
             exit 1
           fi
 
@@ -126,7 +126,9 @@ jobs:
           VERSION: ${{ steps.bump.outputs.version }}
           MAJOR_MINOR: ${{ steps.bump.outputs.major_minor }}
         run: |
-          IMG="${REGISTRY}/${IMAGE_NAME}"
+          # GHCR requires lowercase repository names; GitHub org names can have
+          # mixed case (e.g. OneCodeApS), so we lowercase the whole path here.
+          IMG=$(echo "${REGISTRY}/${IMAGE_NAME}" | tr '[:upper:]' '[:lower:]')
           SHORT_SHA="${GITHUB_SHA::7}"
           TAGS="${IMG}:latest,${IMG}:${SHORT_SHA}"
           if [ "$IS_RELEASE" = "true" ]; then

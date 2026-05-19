@@ -119,7 +119,7 @@ sudo usermod -aG docker deploy
 ```bash
 sudo mkdir -p /opt/onecodebase
 sudo chown deploy:deploy /opt/onecodebase
-sudo -u deploy git clone https://github.com/onecode/Onecodebase.git /opt/onecodebase
+sudo -u deploy git clone https://github.com/OneCodeApS/Onecodebase.git /opt/onecodebase
 ```
 
 **5. Switch to the deploy user.** All remaining commands run as `deploy` from this directory.
@@ -129,7 +129,7 @@ sudo -iu deploy
 cd /opt/onecodebase
 ```
 
-**6. Pin to a released version.** Check the [Releases page](https://github.com/onecode/Onecodebase/releases) for the latest version number, then:
+**6. Pin to a released version.** Check the [Releases page](https://github.com/OneCodeApS/Onecodebase/releases) for the latest version number, then:
 
 ```bash
 git fetch --tags
@@ -152,7 +152,7 @@ openssl rand -base64 24    # use this for each *_PASSWORD value (run once per pa
 Open `.env` in an editor (`nano .env`) and fill in every blank. Set these to your real values:
 
 ```
-GHCR_OWNER=onecode
+GHCR_OWNER=onecodeaps
 DASHBOARD_IMAGE_TAG=0.1.0
 
 API_HOST=api.example.com
@@ -165,7 +165,7 @@ MINIO_PUBLIC_URL=https://files.example.com
 CADDY_TLS=you@your-domain.com
 ```
 
-The image at `ghcr.io/onecode/onecodebase-dashboard` is **public**, so no `docker login` is needed.
+The image at `ghcr.io/onecodeaps/onecodebase-dashboard` is **public**, so no `docker login` is needed.
 
 **8. Run the first deploy.**
 
@@ -213,7 +213,7 @@ Postgres, MinIO, and Caddy keep running during an update — only the dashboard 
 
 ### Steps
 
-**1. Find the new version.** Open the [Releases page](https://github.com/onecode/Onecodebase/releases) and note the version you want (e.g., `0.2.0`).
+**1. Find the new version.** Open the [Releases page](https://github.com/OneCodeApS/Onecodebase/releases) and note the version you want (e.g., `0.2.0`).
 
 **2. Read the release notes.** On the same release page (or `CHANGELOG.md`), look for anything marked **BREAKING** and follow any migration steps before continuing.
 
