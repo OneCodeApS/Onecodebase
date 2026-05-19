@@ -268,26 +268,24 @@ The dashboard container is replaced with the older image; the database is untouc
 
 If you're working on Onecodebase itself (not just self-hosting it):
 
-A single workflow — `.github/workflows/build.yml` — handles both casual rebuilds and version releases.
+The workflow at `.github/workflows/build.yml` is **manual-only**. Pushing to `master` does not trigger anything — you decide when to build by clicking **Run workflow** in the Actions tab.
 
-**Pushing to `main`** — commit and push (GitHub Desktop works fine). The workflow auto-runs and publishes `:latest` + `:<short-sha>` to GHCR. No release, no tag.
+**Day-to-day**
 
-**Cutting a release** — one button, no typing version numbers:
+1. Commit and push as usual (GitHub Desktop works fine). Nothing builds.
+2. When you want a new image on GHCR, go to repo → **Actions** → **Build & Release** → **Run workflow**.
+3. Pick a **Release type** from the dropdown:
+   - **none** — just rebuild the image. Publishes `:latest` + `:<short-sha>` to GHCR. No tag, no release.
+   - **patch / minor / major** — also cut a release. The workflow reads the latest existing tag, computes the next version, validates the matching `CHANGELOG.md` entry exists, builds `:X.Y.Z` + `:X.Y`, creates the git tag, and publishes a GitHub Release page.
 
-1. Decide what kind of bump you want:
-   - **patch** — bug fix, no behavior change (e.g., `0.1.0 → 0.1.1`)
-   - **minor** — backward-compatible feature or change (e.g., `0.1.0 → 0.2.0`)
-   - **major** — breaking change (e.g., `0.1.0 → 1.0.0`)
-2. Update `CHANGELOG.md`: move the `[Unreleased]` entries into a new section with the version you expect (e.g., `[0.2.0]` for a minor bump from `0.1.0`). Commit and push.
-3. In the browser: repo → **Actions** → **Build & Release** → **Run workflow** → pick `patch` / `minor` / `major` from the **Release type** dropdown → **Run workflow**.
+**Cutting a release**
 
-The workflow reads the latest existing tag, computes the next version automatically, validates the matching `CHANGELOG.md` entry exists, builds and pushes `:X.Y.Z` + `:X.Y` images, then creates the git tag and a GitHub Release page with the changelog content. About 2–3 minutes end to end.
+1. Move the `[Unreleased]` entries in `CHANGELOG.md` into a new section with the version you expect (e.g., `[0.2.0]` for a minor bump from `0.1.0`). Commit, push.
+2. Actions → Build & Release → Run workflow → pick `patch` / `minor` / `major` → Run.
 
-If the changelog entry is missing for the computed version, the workflow fails fast before building — a forgotten entry won't ship a half-baked release.
+If the changelog entry for the computed version is missing, the workflow fails fast before building — a forgotten entry won't ship a half-baked release.
 
-**On-demand rebuild without a release** — pick `none` from the same dropdown. Behaves identically to a `main` push: rebuilds `:latest` + `:<short-sha>`, no tag created.
-
-**Production deploy** — the production server lives behind a VPN, so CI never SSHes anywhere. After a release publishes, connect VPN, SSH to the server, and run `./scripts/deploy.sh 0.2.0` (the Actions run summary prints the exact command).
+**Production deploy** — the production server lives behind a VPN, so CI never SSHes anywhere. After the release publishes, connect VPN, SSH to the server, and run `./scripts/deploy.sh 0.2.0` (the Actions run summary prints the exact command).
 
 ## Where things live
 

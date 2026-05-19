@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getSession } from "@/lib/auth";
+import { getSession } from "@/lib/session";
 import { login } from "./actions";
 
 type SearchParams = Promise<{ next?: string; error?: string }>;

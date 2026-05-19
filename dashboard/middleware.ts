@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getIronSession } from "iron-session";
-import { sessionOptions, type Session } from "./lib/auth";
+import { sessionOptions, type Session } from "./lib/session";
 
 // Routes that anonymous users can reach.
 const PUBLIC_PATHS = new Set<string>(["/login"]);

@@ -3,7 +3,8 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { randomBytes } from "node:crypto";
-import { findAdminByEmail, getSession, verifyPassword } from "@/lib/auth";
+import { findAdminByEmail, verifyPassword } from "@/lib/auth";
+import { getSession } from "@/lib/session";
 import { audit } from "@/lib/audit";
 
 // Only allow same-host redirects so a crafted ?next= can't bounce off-site.

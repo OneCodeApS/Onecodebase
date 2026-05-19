@@ -1,21 +1,14 @@
 name: Build & Release
 
-# One workflow handles both casual rebuilds and version releases.
+# Manual-only build & release. Pushes to master do NOT auto-trigger anything —
+# you fire this from the Actions tab when you actually want to build.
 #
-# Triggers:
-#   - push to main         → rebuild :latest + :<short-sha>
-#   - workflow_dispatch    → manual run from the Actions tab:
-#       release_type=none  → same as a main push (rebuild only)
-#       release_type=patch → compute next x.y.(z+1), build, tag, release
-#       release_type=minor → compute next x.(y+1).0, build, tag, release
-#       release_type=major → compute next (x+1).0.0, build, tag, release
-#
-# Note: tag creation via GITHUB_TOKEN does not fire other workflows
-# (GitHub's anti-loop protection), so there's no double-build to worry about.
+#   release_type=none  → rebuild only, publish :latest + :<short-sha>
+#   release_type=patch → compute next x.y.(z+1), build, tag, release
+#   release_type=minor → compute next x.(y+1).0, build, tag, release
+#   release_type=major → compute next (x+1).0.0, build, tag, release
 
 on:
-  push:
-    branches: [master]
   workflow_dispatch:
     inputs:
       release_type:

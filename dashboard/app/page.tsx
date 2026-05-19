@@ -1,4 +1,4 @@
-import { getSession } from "@/lib/auth";
+import { getSession } from "@/lib/session";
 import { logout } from "./logout/actions";
 
 export default async function Home() {
