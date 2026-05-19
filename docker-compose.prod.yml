@@ -1,0 +1,16 @@
+# Production overrides.
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# CI sets DASHBOARD_IMAGE_TAG to the commit SHA when it pulls the new image;
+# manual restarts use whatever DASHBOARD_IMAGE_TAG is currently in .env on the
+# server (the CI workflow keeps that line up to date).
+
+services:
+  dashboard:
+    image: ghcr.io/${GHCR_OWNER:?GHCR_OWNER must be set}/onecodebase-dashboard:${DASHBOARD_IMAGE_TAG:-latest}
+    pull_policy: always
+
+  postgres:
+    # Don't expose Postgres on the host network in prod. Use docker exec
+    # or an SSH tunnel to reach the DB from your laptop.
+    ports: !override []

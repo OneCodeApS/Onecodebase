@@ -1,0 +1,26 @@
+# Caddyfile — routes the three public subdomains.
+#
+# CADDY_TLS controls TLS behavior:
+#   - "internal"      → Caddy's local CA (good for *.localhost dev)
+#   - an email address → Let's Encrypt with that contact address (prod)
+#
+# In dev, trust Caddy's local CA so browsers stop warning:
+#   docker compose exec caddy caddy trust
+#   (or import /data/caddy/pki/authorities/local/root.crt on the host)
+
+{$API_HOST} {
+	tls {$CADDY_TLS}
+	reverse_proxy postgrest:3000
+}
+
+{$DASHBOARD_HOST} {
+	tls {$CADDY_TLS}
+	reverse_proxy dashboard:3000
+}
+
+{$FILES_HOST} {
+	tls {$CADDY_TLS}
+	# MinIO S3 API. The web console is on :9001 and intentionally not exposed —
+	# the dashboard's file browser will talk to the S3 API directly.
+	reverse_proxy minio:9000
+}
