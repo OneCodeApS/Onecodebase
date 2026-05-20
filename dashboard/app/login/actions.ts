@@ -2,12 +2,11 @@
 
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
-import { randomBytes } from "node:crypto";
-import { findAdminByEmail, verifyPassword } from "@/lib/auth";
+import { randomBytes, randomUUID } from "node:crypto";
+import { findUserByEmail, verifyPassword } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { audit } from "@/lib/audit";
 
-// Only allow same-host redirects so a crafted ?next= can't bounce off-site.
 function safeNext(next: FormDataEntryValue | null): string {
   if (typeof next !== "string") return "/";
   if (!next.startsWith("/") || next.startsWith("//")) return "/";
@@ -30,29 +29,47 @@ export async function login(formData: FormData) {
     redirect(`/login?error=${encodeURIComponent("Email and password are required")}`);
   }
 
-  const admin = await findAdminByEmail(email);
-  const ok = admin ? await verifyPassword(admin.password_hash, password) : false;
+  const user = await findUserByEmail(email);
+  const passwordOk = user ? await verifyPassword(user.password_hash, password) : false;
+  const disabled = user?.disabled_at != null;
+  const ok = !!user && passwordOk && !disabled;
 
   const ip = await clientIp();
 
-  if (!admin || !ok) {
+  if (!ok) {
+    let reason: string;
+    if (!user) reason = "unknown_email";
+    else if (!passwordOk) reason = "bad_password";
+    else reason = "account_disabled";
     await audit({
       actor: email || "<unknown>",
+      actorId: user?.id ?? null,
+      role: user?.role ?? null,
       action: "login",
       success: false,
       ip,
-      metadata: { reason: admin ? "bad_password" : "unknown_email" },
+      metadata: { reason },
     });
     redirect(`/login?error=${encodeURIComponent("Invalid email or password")}`);
   }
 
   const session = await getSession();
-  session.adminId = admin.id;
-  session.email = admin.email;
+  session.userId = user!.id;
+  session.email = user!.email;
+  session.role = user!.role;
+  session.sessionId = randomUUID();
   session.csrf = randomBytes(32).toString("hex");
   await session.save();
 
-  await audit({ actor: admin.email, action: "login", success: true, ip });
+  await audit({
+    actor: user!.email,
+    actorId: user!.id,
+    role: user!.role,
+    action: "login",
+    success: true,
+    ip,
+    sessionId: session.sessionId,
+  });
 
   redirect(next);
 }

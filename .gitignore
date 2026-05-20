@@ -13,3 +13,8 @@ out/
 # editor
 .vscode/
 .idea/
+.claude/
+
+# generated locally on each install
+caddy-root.crt
+audit-logs/
