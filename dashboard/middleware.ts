@@ -14,7 +14,7 @@ export async function middleware(req: NextRequest) {
   }
 
   const res = NextResponse.next();
-  const session = await getIronSession<Session>(req, res, sessionOptions);
+  const session = await getIronSession<Session>(req, res, sessionOptions());
 
   if (!session.adminId) {
     const url = req.nextUrl.clone();

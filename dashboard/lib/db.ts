@@ -20,7 +20,9 @@ function buildPool(): Pool {
   });
 }
 
-export const pool: Pool = globalThis.__pgPool ?? buildPool();
-if (process.env.NODE_ENV !== "production") {
-  globalThis.__pgPool = pool;
+export function pool(): Pool {
+  if (!globalThis.__pgPool) {
+    globalThis.__pgPool = buildPool();
+  }
+  return globalThis.__pgPool;
 }

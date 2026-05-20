@@ -11,7 +11,7 @@ export type AuditEntry = {
 };
 
 export async function audit(entry: AuditEntry): Promise<void> {
-  await pool.query(
+  await pool().query(
     `INSERT INTO _dashboard.admin_audit_log
        (actor, action, target, statement, metadata, ip, success)
      VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)`,

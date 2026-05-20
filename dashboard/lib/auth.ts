@@ -18,7 +18,7 @@ export type Admin = {
 };
 
 export async function findAdminByEmail(email: string): Promise<Admin | null> {
-  const { rows } = await pool.query<Admin>(
+  const { rows } = await pool().query<Admin>(
     "SELECT id, email, password_hash FROM _dashboard.admins WHERE email = $1",
     [email.toLowerCase()],
   );
