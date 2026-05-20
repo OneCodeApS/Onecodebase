@@ -2,7 +2,7 @@
 // can import sessionOptions and Session without dragging @node-rs/argon2 or
 // `pg` into its bundle.
 import { cookies } from "next/headers";
-import { getIronSession, type SessionOptions } from "iron-session";
+import { getIronSession, type IronSession, type SessionOptions } from "iron-session";
 
 export type Session = {
   adminId?: string;
@@ -29,6 +29,6 @@ export function sessionOptions(): SessionOptions {
   };
 }
 
-export async function getSession() {
+export async function getSession(): Promise<IronSession<Session>> {
   return getIronSession<Session>(await cookies(), sessionOptions());
 }
