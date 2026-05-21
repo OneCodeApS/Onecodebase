@@ -10,6 +10,7 @@
     "create-admin": "node ./scripts/create-admin.mjs"
   },
   "dependencies": {
+    "@codemirror/lang-javascript": "^6.2.5",
     "@codemirror/lang-sql": "^6.10.0",
     "@node-rs/argon2": "^2.0.2",
     "@uiw/react-codemirror": "^4.25.9",

@@ -24,13 +24,20 @@ function isRealtimeApi(pathname: string): boolean {
   return pathname === "/realtime" || pathname.startsWith("/realtime/");
 }
 
+// Edge functions — function authors choose their own auth model; the
+// dashboard doesn't gate access.
+function isFunctionsApi(pathname: string): boolean {
+  return pathname.startsWith("/functions/v1/");
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   if (
     PUBLIC_PATHS.has(pathname) ||
     isPublicAuthApi(pathname) ||
-    isRealtimeApi(pathname)
+    isRealtimeApi(pathname) ||
+    isFunctionsApi(pathname)
   ) {
     return NextResponse.next();
   }

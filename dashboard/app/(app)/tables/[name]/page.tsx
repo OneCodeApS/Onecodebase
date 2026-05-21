@@ -56,6 +56,30 @@ function renderCell(v: unknown): string {
   return String(v);
 }
 
+// Columns containing secrets or other values we never want to render plainly
+// in the table browser. Browsing a table that contains one of these will show
+// a masked placeholder instead. Defense in depth — admins can still query the
+// underlying values via the SQL editor if they really need to.
+const SENSITIVE_COLUMNS = new Set<string>([
+  // Even though value_encrypted is ciphertext, masking it keeps the table
+  // browser from giving away ciphertext length / structure for free.
+  "_dashboard.function_env.value",
+  "_dashboard.function_env.value_encrypted",
+  "_dashboard.users.password_hash",
+  "auth.users.encrypted_password",
+  "auth.sessions.refresh_token_hash",
+]);
+
+function isSensitive(schema: string, table: string, column: string): boolean {
+  return SENSITIVE_COLUMNS.has(`${schema}.${table}.${column}`);
+}
+
+function maskedDisplay(v: unknown): string {
+  if (v === null || v === undefined || v === "") return "—";
+  const len = typeof v === "string" ? v.length : String(v).length;
+  return `•••••• (${len} chars)`;
+}
+
 // Carries the `?schema=` param through pagination links so Next/Prev don't
 // drop the user back into the default schema.
 function pageHref(name: string, schema: string, page: number): string {
@@ -134,12 +158,18 @@ export default async function TableRowsPage({
                   className="border-b border-neutral-800 last:border-b-0 odd:bg-neutral-900 even:bg-neutral-950/40 hover:bg-neutral-800/50"
                 >
                   {columns.map((c) => {
-                    const text = renderCell(row[c.column_name]);
+                    const sensitive = isSensitive(schema, name, c.column_name);
+                    const raw = row[c.column_name];
+                    const text = sensitive ? maskedDisplay(raw) : renderCell(raw);
                     return (
                       <td
                         key={c.column_name}
-                        className="max-w-xs truncate px-3 py-2 font-mono text-neutral-300"
-                        title={text}
+                        className={`max-w-xs truncate px-3 py-2 font-mono ${
+                          sensitive ? "text-neutral-500" : "text-neutral-300"
+                        }`}
+                        // Don't put the real value in a title= attribute — that
+                        // would re-expose it on hover.
+                        title={sensitive ? "masked" : text}
                       >
                         {text}
                       </td>

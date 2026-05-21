@@ -28,6 +28,12 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
+    heading: "Functions",
+    items: [
+      { href: "/admin/functions", label: "Edge functions", match: "/admin/functions", adminOnly: true },
+    ],
+  },
+  {
     heading: "Storage",
     items: [{ href: "/storage", label: "Buckets", match: "/storage" }],
   },
