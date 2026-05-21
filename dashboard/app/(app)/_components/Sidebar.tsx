@@ -31,6 +31,7 @@ const GROUPS: NavGroup[] = [
     heading: "Functions",
     items: [
       { href: "/admin/functions", label: "Edge functions", match: "/admin/functions", adminOnly: true },
+      { href: "/admin/cron", label: "Cron jobs", match: "/admin/cron", adminOnly: true },
     ],
   },
   {
