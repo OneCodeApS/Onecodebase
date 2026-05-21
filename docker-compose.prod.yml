@@ -14,3 +14,8 @@ services:
     # Don't expose Postgres on the host network in prod. Use docker exec
     # or an SSH tunnel to reach the DB from your laptop.
     ports: !override []
+
+  minio:
+    # Same story as Postgres — the local-dev loopback mapping has no place
+    # in prod. The dashboard container reaches MinIO via the internal network.
+    ports: !override []

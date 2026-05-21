@@ -26,10 +26,10 @@ const GROUPS: NavGroup[] = [
       { href: "/sql", label: "SQL Editor", match: "/sql" },
     ],
   },
-  // {
-  //   heading: "Storage",
-  //   items: [{ href: "/storage", label: "Files", match: "/storage" }],
-  // },
+  {
+    heading: "Storage",
+    items: [{ href: "/storage", label: "Buckets", match: "/storage" }],
+  },
   {
     heading: "Authentication",
     items: [

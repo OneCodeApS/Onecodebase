@@ -1,0 +1,82 @@
+import { pool } from "./db";
+
+export type Visibility = "public" | "private";
+
+export type BucketPolicy = {
+  bucket: string;
+  visibility: Visibility;
+  max_upload_mb: number;
+  // null = all MIME types allowed.
+  allowed_mime: string[] | null;
+};
+
+// Defaults applied to buckets that don't yet have a policy row.
+export const DEFAULT_POLICY = {
+  visibility: "private" as Visibility,
+  max_upload_mb: 25,
+  allowed_mime: null as string[] | null,
+};
+
+export async function getBucketPolicy(bucket: string): Promise<BucketPolicy> {
+  const { rows } = await pool().query<BucketPolicy>(
+    `SELECT bucket, visibility, max_upload_mb, allowed_mime
+       FROM _dashboard.bucket_policies
+      WHERE bucket = $1`,
+    [bucket],
+  );
+  if (rows.length > 0) return rows[0];
+  return { bucket, ...DEFAULT_POLICY };
+}
+
+export async function setBucketPolicy(
+  policy: BucketPolicy,
+  updatedBy: string | null,
+): Promise<void> {
+  await pool().query(
+    `INSERT INTO _dashboard.bucket_policies
+       (bucket, visibility, max_upload_mb, allowed_mime, updated_by, updated_at)
+     VALUES ($1, $2, $3, $4, $5, now())
+     ON CONFLICT (bucket) DO UPDATE
+       SET visibility    = EXCLUDED.visibility,
+           max_upload_mb = EXCLUDED.max_upload_mb,
+           allowed_mime  = EXCLUDED.allowed_mime,
+           updated_by    = EXCLUDED.updated_by,
+           updated_at    = now()`,
+    [
+      policy.bucket,
+      policy.visibility,
+      policy.max_upload_mb,
+      policy.allowed_mime,
+      updatedBy,
+    ],
+  );
+}
+
+// Checks if a given MIME matches the whitelist. Supports wildcards like
+// "image/*" or "application/*". null/empty whitelist = allow everything.
+export function mimeAllowed(mime: string, allowed: string[] | null): boolean {
+  if (!allowed || allowed.length === 0) return true;
+  const lower = mime.toLowerCase();
+  return allowed.some((a) => {
+    const al = a.toLowerCase();
+    if (al === lower) return true;
+    if (al.endsWith("/*")) return lower.startsWith(al.slice(0, -1));
+    return false;
+  });
+}
+
+// Generates the AWS-style anonymous-read bucket policy MinIO accepts to
+// expose every object in a bucket publicly via GET.
+export function publicReadPolicy(bucket: string): string {
+  return JSON.stringify({
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Principal: { AWS: ["*"] },
+        Action: ["s3:GetObject"],
+        Resource: [`arn:aws:s3:::${bucket}/*`],
+      },
+    ],
+  });
+}
