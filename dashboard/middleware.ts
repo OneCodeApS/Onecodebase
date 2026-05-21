@@ -18,10 +18,20 @@ function isPublicAuthApi(pathname: string): boolean {
   return pathname.startsWith("/auth/v1/");
 }
 
+// Realtime SSE stream — authenticates via Bearer token / ?token= itself, no
+// dashboard session needed.
+function isRealtimeApi(pathname: string): boolean {
+  return pathname === "/realtime" || pathname.startsWith("/realtime/");
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  if (PUBLIC_PATHS.has(pathname) || isPublicAuthApi(pathname)) {
+  if (
+    PUBLIC_PATHS.has(pathname) ||
+    isPublicAuthApi(pathname) ||
+    isRealtimeApi(pathname)
+  ) {
     return NextResponse.next();
   }
 
