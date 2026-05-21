@@ -23,10 +23,17 @@ export type AuditEntry = {
   sessionId?: string | null;
 };
 
-type ChainBody = {
+// Exported so the chain verifier can reuse the exact same canonical form
+// and hash algorithm — any divergence would cause false positives.
+//
+// Note: actor_id is intentionally NOT part of the hashed body. The audit_log
+// FK has ON DELETE SET NULL, so deleting a user mutates audit_log.actor_id
+// for their existing rows — that would silently invalidate the chain hash for
+// every one of their actions. `actor` (email) is the immutable identifier we
+// hash; actor_id remains a column for joins, but it's outside the proof.
+export type ChainBody = {
   created_at: string;
   actor: string;
-  actor_id: string | null;
   role: UserRole | null;
   action: string;
   target: string | null;
@@ -38,8 +45,8 @@ type ChainBody = {
 };
 
 // Deterministic stringify (sorted keys, recursive) so the same logical
-// body always produces the same hash. Required for any future verifier.
-function canonicalize(o: unknown): string {
+// body always produces the same hash.
+export function canonicalize(o: unknown): string {
   if (o === null || typeof o !== "object") return JSON.stringify(o);
   if (Array.isArray(o)) return "[" + o.map(canonicalize).join(",") + "]";
   const obj = o as Record<string, unknown>;
@@ -53,7 +60,7 @@ function canonicalize(o: unknown): string {
   );
 }
 
-function chainHash(prev: string | null, body: ChainBody): string {
+export function chainHash(prev: string | null, body: ChainBody): string {
   return crypto
     .createHash("sha256")
     .update((prev ?? "") + canonicalize(body))
@@ -91,7 +98,6 @@ export async function audit(entry: AuditEntry): Promise<void> {
     body = {
       created_at: now.toISOString(),
       actor: entry.actor,
-      actor_id: actorId,
       role: entry.role ?? null,
       action: entry.action,
       target: entry.target ?? null,
@@ -103,6 +109,8 @@ export async function audit(entry: AuditEntry): Promise<void> {
     };
     hash = chainHash(prevHash, body);
 
+    // actor_id is stored as a column for joins but is not part of the hashed
+    // body (see ChainBody for the reason).
     await client.query(
       `INSERT INTO _dashboard.audit_log
          (created_at, actor, actor_id, role, action, target, statement,
@@ -111,7 +119,7 @@ export async function audit(entry: AuditEntry): Promise<void> {
       [
         body.created_at,
         body.actor,
-        body.actor_id,
+        actorId,
         body.role,
         body.action,
         body.target,
