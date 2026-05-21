@@ -62,6 +62,10 @@ export function ProvidersTable({ providers }: { providers: ProviderRow[] }) {
 
       {selected && (
         <ProviderConfigPanel
+          // Key forces a fresh component instance when switching between
+          // providers — without it, defaultChecked / defaultValue on the form
+          // inputs reflect the *first* provider opened, not the current one.
+          key={selected.name}
           provider={selected}
           onClose={() => setSelected(null)}
         />

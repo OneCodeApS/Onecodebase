@@ -27,6 +27,11 @@ async function clientIp(): Promise<string | null> {
   return h.get("x-real-ip");
 }
 
+function clamp(n: number, min: number, max: number): number {
+  if (!Number.isFinite(n)) return min;
+  return Math.max(min, Math.min(max, Math.trunc(n)));
+}
+
 export async function updateAuthSettings(formData: FormData) {
   const session = await requireAdmin();
   const ip = await clientIp();
@@ -79,6 +84,39 @@ export async function updateProvider(formData: FormData) {
     if (clientSecretRaw.length > 0) {
       nextConfig.client_secret = clientSecretRaw;
     }
+  } else if (name === "email") {
+    const minLen = clamp(
+      Number(formData.get("min_password_length") ?? 12),
+      6,
+      256,
+    );
+    const otpExp = clamp(
+      Number(formData.get("email_otp_expiration_seconds") ?? 86400),
+      60,
+      30 * 24 * 3600,
+    );
+    const otpLen = clamp(Number(formData.get("email_otp_length") ?? 6), 4, 12);
+    const requirements = String(formData.get("password_requirements") ?? "none");
+    const validRequirements = [
+      "none",
+      "lowercase_uppercase",
+      "lowercase_uppercase_digits",
+      "lowercase_uppercase_digits_symbols",
+    ];
+    nextConfig = {
+      ...existingCfg,
+      secure_email_change: formData.get("secure_email_change") === "on",
+      secure_password_change: formData.get("secure_password_change") === "on",
+      require_current_password_on_update:
+        formData.get("require_current_password_on_update") === "on",
+      prevent_leaked_passwords: formData.get("prevent_leaked_passwords") === "on",
+      min_password_length: minLen,
+      password_requirements: validRequirements.includes(requirements)
+        ? requirements
+        : "none",
+      email_otp_expiration_seconds: otpExp,
+      email_otp_length: otpLen,
+    };
   }
 
   await setProvider(name, { enabled, config: nextConfig }, session.userId ?? null);

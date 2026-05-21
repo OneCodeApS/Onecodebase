@@ -75,3 +75,44 @@ export async function isProviderEnabled(name: string): Promise<boolean> {
   const p = await getProvider(name);
   return !!p?.enabled;
 }
+
+// Email-provider-specific config with sane defaults filled in for fields the
+// admin hasn't customised. Some of these are enforced today; others are
+// persisted but await follow-up features (email change, OTP, etc.) — the UI
+// labels which is which.
+export type PasswordRequirements =
+  | "none"
+  | "lowercase_uppercase"
+  | "lowercase_uppercase_digits"
+  | "lowercase_uppercase_digits_symbols";
+
+export type EmailProviderConfig = {
+  secure_email_change: boolean;
+  secure_password_change: boolean;
+  require_current_password_on_update: boolean;
+  prevent_leaked_passwords: boolean;
+  min_password_length: number;
+  password_requirements: PasswordRequirements;
+  email_otp_expiration_seconds: number;
+  email_otp_length: number;
+};
+
+export const EMAIL_PROVIDER_DEFAULTS: EmailProviderConfig = {
+  secure_email_change: true,
+  secure_password_change: true,
+  require_current_password_on_update: true,
+  prevent_leaked_passwords: false,
+  min_password_length: 12,
+  password_requirements: "none",
+  email_otp_expiration_seconds: 86400,
+  email_otp_length: 6,
+};
+
+export async function getEmailProviderConfig(): Promise<EmailProviderConfig> {
+  const p = await getProvider("email");
+  const raw = (p?.config ?? {}) as Partial<EmailProviderConfig>;
+  return {
+    ...EMAIL_PROVIDER_DEFAULTS,
+    ...raw,
+  };
+}

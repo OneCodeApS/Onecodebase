@@ -44,12 +44,17 @@ export default async function AuthProvidersPage({
     listProviders(),
   ]);
 
+  const base = (process.env.AUTH_REDIRECT_BASE_URL ?? "").replace(/\/+$/, "");
   const rows: ProviderRow[] = providers.map((p) => ({
     name: p.name,
     enabled: p.enabled,
     config: p.config,
     label: descriptorFor(p.name).label,
     description: descriptorFor(p.name).description,
+    redirectUri:
+      p.name === "microsoft" && base
+        ? `${base}/auth/v1/microsoft/callback`
+        : null,
   }));
 
   return (
