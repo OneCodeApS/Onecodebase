@@ -11,10 +11,17 @@ function isAdminPath(pathname: string): boolean {
   return pathname === "/admin" || pathname.startsWith("/admin/");
 }
 
+// End-user auth API — public, called by external apps with their own bearer
+// token (or no token, for sign-up / sign-in). Dashboard session is irrelevant
+// here.
+function isPublicAuthApi(pathname: string): boolean {
+  return pathname.startsWith("/auth/v1/");
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  if (PUBLIC_PATHS.has(pathname)) {
+  if (PUBLIC_PATHS.has(pathname) || isPublicAuthApi(pathname)) {
     return NextResponse.next();
   }
 

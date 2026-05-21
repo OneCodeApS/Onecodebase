@@ -33,7 +33,9 @@ const GROUPS: NavGroup[] = [
   {
     heading: "Authentication",
     items: [
-      { href: "/admin/users", label: "Users", match: "/admin/users", adminOnly: true },
+      { href: "/admin/auth-providers", label: "Auth providers", match: "/admin/auth-providers", adminOnly: true },
+      { href: "/admin/end-users", label: "End users", match: "/admin/end-users", adminOnly: true },
+      { href: "/admin/users", label: "Dashboard users", match: "/admin/users", adminOnly: true },
     ],
   },
   {
