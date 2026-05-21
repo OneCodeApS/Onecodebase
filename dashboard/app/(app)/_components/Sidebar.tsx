@@ -39,7 +39,8 @@ const GROUPS: NavGroup[] = [
   {
     heading: "Settings",
     items: [
-      { href: "/admin/settings", label: "Audit log", match: "/admin/settings", adminOnly: true },
+      { href: "/admin/audit", label: "Audit log", match: "/admin/audit", adminOnly: true },
+      { href: "/admin/settings", label: "Audit settings", match: "/admin/settings", adminOnly: true },
     ],
   },
 ];
