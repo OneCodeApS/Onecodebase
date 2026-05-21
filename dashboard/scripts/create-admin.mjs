@@ -62,18 +62,24 @@ async function main() {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   try {
     const { rows: existing } = await pool.query(
-      "SELECT id FROM _dashboard.admins WHERE email = $1",
+      "SELECT id FROM _dashboard.users WHERE email = $1",
       [email],
     );
     if (existing.length > 0) {
       await pool.query(
-        "UPDATE _dashboard.admins SET password_hash = $2 WHERE email = $1",
+        `UPDATE _dashboard.users
+            SET password_hash = $2,
+                role          = 'admin',
+                disabled_at   = NULL,
+                updated_at    = now()
+          WHERE email = $1`,
         [email, password_hash],
       );
       console.log(`Updated password for ${email}`);
     } else {
       await pool.query(
-        "INSERT INTO _dashboard.admins (email, password_hash) VALUES ($1, $2)",
+        `INSERT INTO _dashboard.users (email, password_hash, role)
+         VALUES ($1, $2, 'admin')`,
         [email, password_hash],
       );
       console.log(`Created admin ${email}`);

@@ -4,9 +4,15 @@
 import { cookies } from "next/headers";
 import { getIronSession, type IronSession, type SessionOptions } from "iron-session";
 
+export type UserRole = "admin" | "guest";
+
 export type Session = {
-  adminId?: string;
+  userId?: string;
   email?: string;
+  role?: UserRole;
+  // Stable identifier for this login session; written to every audit row
+  // so a chain of actions can be tied back to a single sign-in.
+  sessionId?: string;
   // CSRF token bound to this session; double-submitted from forms.
   csrf?: string;
 };

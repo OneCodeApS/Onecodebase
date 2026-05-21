@@ -10,7 +10,7 @@ export default async function LoginPage({
   searchParams: SearchParams;
 }) {
   const session = await getSession();
-  if (session.adminId) {
+  if (session.userId) {
     redirect("/");
   }
 

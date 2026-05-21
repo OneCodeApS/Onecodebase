@@ -1,8 +1,7 @@
 import { hash, verify } from "@node-rs/argon2";
 import { pool } from "./db";
+import type { UserRole } from "./session";
 
-// Argon2id with sensible defaults. @node-rs/argon2's defaults are already
-// reasonable for an interactive login on modest hardware.
 export function hashPassword(plain: string): Promise<string> {
   return hash(plain);
 }
@@ -11,15 +10,18 @@ export function verifyPassword(stored: string, plain: string): Promise<boolean> 
   return verify(stored, plain);
 }
 
-export type Admin = {
+export type User = {
   id: string;
   email: string;
   password_hash: string;
+  role: UserRole;
+  disabled_at: Date | null;
 };
 
-export async function findAdminByEmail(email: string): Promise<Admin | null> {
-  const { rows } = await pool().query<Admin>(
-    "SELECT id, email, password_hash FROM _dashboard.admins WHERE email = $1",
+export async function findUserByEmail(email: string): Promise<User | null> {
+  const { rows } = await pool().query<User>(
+    `SELECT id, email, password_hash, role, disabled_at
+       FROM _dashboard.users WHERE email = $1`,
     [email.toLowerCase()],
   );
   return rows[0] ?? null;

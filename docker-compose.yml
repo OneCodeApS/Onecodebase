@@ -72,6 +72,11 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       DASHBOARD_PUBLIC_URL: ${DASHBOARD_PUBLIC_URL:-http://dashboard.localhost}
+      AUDIT_LOG_DIR: /audit
+    volumes:
+      # Host path for the file-based audit log. The admin chooses the
+      # subdirectory under this mount in the dashboard.
+      - ${AUDIT_HOST_PATH:-./audit-logs}:/audit
     depends_on:
       postgres:
         condition: service_healthy
