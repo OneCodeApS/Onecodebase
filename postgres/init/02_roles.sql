@@ -21,10 +21,22 @@ GRANT anon TO authenticator;
 GRANT service_role TO authenticator;
 
 -- dashboard_admin: the dashboard's connection. Broad privileges within this DB.
+-- BYPASSRLS so the management UI sees and edits every row regardless of the
+-- policies meant to constrain anon/authenticated PostgREST clients.
 -- Crucially, authenticator does NOT have access to this role, so it is unreachable
 -- via PostgREST.
-CREATE ROLE dashboard_admin LOGIN PASSWORD :'dashboard_admin_pw';
+CREATE ROLE dashboard_admin LOGIN BYPASSRLS PASSWORD :'dashboard_admin_pw';
 GRANT ALL ON DATABASE postgres TO dashboard_admin;
+
+-- dashboard_admin needs full access to public so the dashboard's table browser,
+-- SQL editor, etc. can read/modify any user data.
+GRANT USAGE, CREATE ON SCHEMA public TO dashboard_admin;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+	GRANT ALL ON TABLES TO dashboard_admin;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+	GRANT ALL ON SEQUENCES TO dashboard_admin;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+	GRANT ALL ON FUNCTIONS TO dashboard_admin;
 
 -- Default privileges on the public schema for the API roles.
 GRANT USAGE ON SCHEMA public TO anon, service_role;

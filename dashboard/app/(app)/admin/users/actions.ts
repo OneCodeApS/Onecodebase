@@ -22,15 +22,24 @@ async function requireAdmin() {
   return s;
 }
 
-export async function createGuest(formData: FormData) {
+// Roles the admin UI is allowed to assign. 'admin' is intentionally excluded —
+// admins are bootstrapped via the CLI (npm run create-admin) only.
+const ASSIGNABLE_ROLES = ["read_write", "read_only"] as const;
+type AssignableRole = (typeof ASSIGNABLE_ROLES)[number];
+
+export async function createUser(formData: FormData) {
   const session = await requireAdmin();
   const ip = await clientIp();
 
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
+  const role = String(formData.get("role") ?? "") as AssignableRole;
 
   if (!email.includes("@") || password.length < 12) {
     redirect("/admin/users?error=" + encodeURIComponent("Invalid email or password too short"));
+  }
+  if (!ASSIGNABLE_ROLES.includes(role)) {
+    redirect("/admin/users?error=" + encodeURIComponent("Invalid role"));
   }
 
   const password_hash = await hashPassword(password);
@@ -39,10 +48,10 @@ export async function createGuest(formData: FormData) {
   try {
     const r = await pool().query<{ id: string }>(
       `INSERT INTO _dashboard.users (email, password_hash, role)
-       VALUES ($1, $2, 'guest')
+       VALUES ($1, $2, $3)
        ON CONFLICT (email) DO NOTHING
        RETURNING id`,
-      [email, password_hash],
+      [email, password_hash, role],
     );
     if (r.rows.length === 0) {
       errMsg = "Email already in use";
@@ -62,22 +71,23 @@ export async function createGuest(formData: FormData) {
     success: !errMsg,
     ip,
     sessionId: session.sessionId ?? null,
-    metadata: { role: "guest", new_user_id: newId },
+    metadata: { role, new_user_id: newId },
   });
 
   if (errMsg) {
     redirect("/admin/users?error=" + encodeURIComponent(errMsg));
   }
-  redirect("/admin/users?ok=" + encodeURIComponent(`Created ${email}`));
+  redirect("/admin/users?ok=" + encodeURIComponent(`Created ${email} (${role})`));
 }
 
 async function setDisabledAt(id: string, disabled: boolean, session: Awaited<ReturnType<typeof getSession>>) {
   const ip = await clientIp();
+  // Guard: admins can only be disabled via direct DB intervention, not the UI.
   const r = await pool().query<{ email: string; role: string }>(
     `UPDATE _dashboard.users
         SET disabled_at = ${disabled ? "now()" : "NULL"},
             updated_at  = now()
-      WHERE id = $1 AND role = 'guest'
+      WHERE id = $1 AND role <> 'admin'
       RETURNING email, role`,
     [id],
   );

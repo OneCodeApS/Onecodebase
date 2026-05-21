@@ -4,7 +4,7 @@
 import { cookies } from "next/headers";
 import { getIronSession, type IronSession, type SessionOptions } from "iron-session";
 
-export type UserRole = "admin" | "guest";
+export type UserRole = "admin" | "read_write" | "read_only";
 
 export type Session = {
   userId?: string;

@@ -3,15 +3,18 @@ CREATE SCHEMA IF NOT EXISTS _dashboard;
 REVOKE ALL ON SCHEMA _dashboard FROM PUBLIC;
 GRANT USAGE, CREATE ON SCHEMA _dashboard TO dashboard_admin;
 
--- Users. Two roles:
---   admin — OneCode operators. Full access, can manage other users.
---   guest — customer users. Full access to data but cannot manage users.
+-- Users. Three roles:
+--   admin      — OneCode operators. Full access, can manage other users.
+--   read_write — can view and modify data through the dashboard UI.
+--   read_only  — can only view data through the dashboard UI.
+-- These roles gate the dashboard UI only. Application end-user permissions
+-- (e.g. PostgREST JWT roles, RLS) are managed separately.
 CREATE TABLE _dashboard.users (
 	id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
 	email         text NOT NULL UNIQUE,
 	password_hash text NOT NULL,
-	role          text NOT NULL DEFAULT 'guest'
-		CHECK (role IN ('admin', 'guest')),
+	role          text NOT NULL DEFAULT 'read_only'
+		CHECK (role IN ('admin', 'read_write', 'read_only')),
 	created_at    timestamptz NOT NULL DEFAULT now(),
 	updated_at    timestamptz NOT NULL DEFAULT now(),
 	disabled_at   timestamptz

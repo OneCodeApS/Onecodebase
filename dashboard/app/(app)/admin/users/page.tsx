@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { pool } from "@/lib/db";
-import { createGuest, disableUser, enableUser } from "./actions";
+import type { UserRole } from "@/lib/session";
+import { Card } from "../../_components/Card";
+import { createUser, disableUser, enableUser } from "./actions";
 
 type Row = {
   id: string;
   email: string;
-  role: "admin" | "guest";
+  role: UserRole;
   created_at: Date;
   disabled_at: Date | null;
 };
@@ -45,18 +47,19 @@ export default async function UsersPage({
         </p>
       )}
 
-      <section className="mt-6">
-        <h2 className="text-lg font-medium">Create guest</h2>
+      <Card padded className="mt-6">
+        <h2 className="text-lg font-medium">Create user</h2>
         <p className="mt-1 text-sm text-neutral-500">
-          Guests can do everything except manage users.
+          Read-only users can view data only. Read/write users can also modify it.
+          Neither can manage other users — admins are bootstrapped via the CLI.
         </p>
-        <form action={createGuest} className="mt-3 flex flex-col gap-2 sm:flex-row">
+        <form action={createUser} className="mt-3 flex flex-col gap-2 sm:flex-row">
           <input
             type="email"
             name="email"
             required
             placeholder="customer@example.com"
-            className="flex-1 rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-sm"
+            className="flex-1 rounded border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm"
           />
           <input
             type="password"
@@ -64,8 +67,17 @@ export default async function UsersPage({
             required
             minLength={12}
             placeholder="Initial password (min 12 chars)"
-            className="flex-1 rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-sm"
+            className="flex-1 rounded border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm"
           />
+          <select
+            name="role"
+            required
+            defaultValue="read_only"
+            className="rounded border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm"
+          >
+            <option value="read_only">Read only</option>
+            <option value="read_write">Read / write</option>
+          </select>
           <button
             type="submit"
             className="rounded border border-neutral-700 px-3 py-1.5 text-sm hover:bg-neutral-800"
@@ -73,24 +85,27 @@ export default async function UsersPage({
             Create
           </button>
         </form>
-      </section>
+      </Card>
 
-      <section className="mt-10">
-        <h2 className="text-lg font-medium">All users</h2>
+      <Card className="mt-6 overflow-x-auto">
+        <h2 className="px-5 pt-4 text-lg font-medium">All users</h2>
         <table className="mt-3 w-full border-collapse text-sm">
           <thead>
-            <tr className="border-b border-neutral-800 text-left text-neutral-400">
-              <th className="py-2 pr-3 font-normal">Email</th>
+            <tr className="border-y border-neutral-700 bg-neutral-800/60 text-left text-neutral-400">
+              <th className="px-5 py-2 font-normal">Email</th>
               <th className="py-2 pr-3 font-normal">Role</th>
               <th className="py-2 pr-3 font-normal">Status</th>
               <th className="py-2 pr-3 font-normal">Created</th>
-              <th className="py-2 font-normal" />
+              <th className="py-2 pr-5 font-normal" />
             </tr>
           </thead>
           <tbody>
             {users.map((u) => (
-              <tr key={u.id} className="border-b border-neutral-900/50">
-                <td className="py-2 pr-3 font-mono">{u.email}</td>
+              <tr
+                key={u.id}
+                className="border-b border-neutral-800 last:border-b-0 odd:bg-neutral-900 even:bg-neutral-950/40 hover:bg-neutral-800/50"
+              >
+                <td className="px-5 py-2 font-mono">{u.email}</td>
                 <td className="py-2 pr-3">{u.role}</td>
                 <td className="py-2 pr-3">
                   {u.disabled_at ? (
@@ -102,8 +117,8 @@ export default async function UsersPage({
                 <td className="py-2 pr-3 text-neutral-500">
                   {new Date(u.created_at).toISOString().slice(0, 10)}
                 </td>
-                <td className="py-2">
-                  {u.role === "guest" && (
+                <td className="py-2 pr-5">
+                  {u.role !== "admin" && (
                     <form
                       action={u.disabled_at ? enableUser : disableUser}
                       className="inline"
@@ -122,7 +137,7 @@ export default async function UsersPage({
             ))}
           </tbody>
         </table>
-      </section>
+      </Card>
     </main>
   );
 }

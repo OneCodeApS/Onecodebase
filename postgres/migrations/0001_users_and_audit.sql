@@ -38,12 +38,15 @@ ALTER TABLE _dashboard.users ADD COLUMN IF NOT EXISTS disabled_at timestamptz;
 -- 4. Backfill role for any pre-existing rows (they were all admins).
 UPDATE _dashboard.users SET role = 'admin' WHERE role IS NULL;
 
-ALTER TABLE _dashboard.users ALTER COLUMN role SET DEFAULT 'guest';
+-- 4b. Map old 'guest' role to 'read_only' (role rename in v0.2).
+UPDATE _dashboard.users SET role = 'read_only' WHERE role = 'guest';
+
+ALTER TABLE _dashboard.users ALTER COLUMN role SET DEFAULT 'read_only';
 ALTER TABLE _dashboard.users ALTER COLUMN role SET NOT NULL;
 
 ALTER TABLE _dashboard.users DROP CONSTRAINT IF EXISTS users_role_check;
 ALTER TABLE _dashboard.users ADD CONSTRAINT users_role_check
-  CHECK (role IN ('admin', 'guest'));
+  CHECK (role IN ('admin', 'read_write', 'read_only'));
 
 -- 5. Rename admin_audit_log → audit_log (it logs everyone now).
 DO $$
@@ -104,5 +107,23 @@ ON CONFLICT (key) DO NOTHING;
 -- 8. Re-assert dashboard_admin grants now that new objects exist.
 GRANT ALL ON ALL TABLES    IN SCHEMA _dashboard TO dashboard_admin;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA _dashboard TO dashboard_admin;
+
+-- 9. Backfill: v0.1.0 forgot to grant dashboard_admin access to public, which
+-- breaks the table browser / SQL editor. Idempotent.
+GRANT USAGE, CREATE ON SCHEMA public TO dashboard_admin;
+GRANT ALL ON ALL TABLES    IN SCHEMA public TO dashboard_admin;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO dashboard_admin;
+GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO dashboard_admin;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT ALL ON TABLES TO dashboard_admin;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT ALL ON SEQUENCES TO dashboard_admin;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT ALL ON FUNCTIONS TO dashboard_admin;
+
+-- 10. dashboard_admin must bypass RLS so the management UI sees and edits
+-- every row regardless of policies meant for anon/authenticated PostgREST
+-- clients. Idempotent.
+ALTER ROLE dashboard_admin BYPASSRLS;
 
 COMMIT;

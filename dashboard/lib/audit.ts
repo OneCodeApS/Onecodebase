@@ -69,6 +69,19 @@ export async function audit(entry: AuditEntry): Promise<void> {
     await client.query("BEGIN");
     await client.query("SELECT pg_advisory_xact_lock($1)", [CHAIN_LOCK_KEY]);
 
+    // Resolve actor_id: if the referenced user no longer exists (deleted user,
+    // stale dev session after a `down -v`, etc.), store NULL so the FK doesn't
+    // reject the insert. The actor email is still recorded, so the row is not
+    // lost. Mirrors the FK's existing ON DELETE SET NULL behaviour.
+    let actorId: string | null = entry.actorId ?? null;
+    if (actorId !== null) {
+      const exists = await client.query<{ id: string }>(
+        "SELECT id FROM _dashboard.users WHERE id = $1",
+        [actorId],
+      );
+      if (exists.rows.length === 0) actorId = null;
+    }
+
     const prev = await client.query<{ hash: string | null }>(
       "SELECT hash FROM _dashboard.audit_log ORDER BY id DESC LIMIT 1",
     );
@@ -78,7 +91,7 @@ export async function audit(entry: AuditEntry): Promise<void> {
     body = {
       created_at: now.toISOString(),
       actor: entry.actor,
-      actor_id: entry.actorId ?? null,
+      actor_id: actorId,
       role: entry.role ?? null,
       action: entry.action,
       target: entry.target ?? null,

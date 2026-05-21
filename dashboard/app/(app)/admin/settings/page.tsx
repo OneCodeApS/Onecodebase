@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getSetting } from "@/lib/settings";
+import { Card } from "../../_components/Card";
 import { updateAuditSubdir } from "./actions";
 
 export default async function SettingsPage({
@@ -29,7 +30,7 @@ export default async function SettingsPage({
         </p>
       )}
 
-      <section className="mt-6">
+      <Card padded className="mt-6">
         <h2 className="text-lg font-medium">Log destination</h2>
         <p className="mt-1 text-sm text-neutral-500">
           Audit log files are written to{" "}
@@ -48,7 +49,7 @@ export default async function SettingsPage({
             name="subdir"
             required
             defaultValue={subdir}
-            className="flex-1 rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 font-mono text-sm"
+            className="flex-1 rounded border border-neutral-700 bg-neutral-950 px-3 py-1.5 font-mono text-sm"
           />
           <button
             type="submit"
@@ -57,7 +58,7 @@ export default async function SettingsPage({
             Save
           </button>
         </form>
-      </section>
+      </Card>
     </main>
   );
 }
