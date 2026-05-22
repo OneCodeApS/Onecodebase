@@ -15,9 +15,6 @@ export default async function SettingsPage({
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-10">
-      <Link href="/" className="text-sm text-neutral-400 hover:text-neutral-100">
-        ← Back
-      </Link>
       <h1 className="mt-4 text-2xl font-semibold">Audit settings</h1>
 
       {sp.error && (
