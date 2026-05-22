@@ -56,9 +56,12 @@ server_idle_timeout = ${SERVER_IDLE_TIMEOUT}
 # doesn't leak SET / temp tables / prepared statements across clients.
 server_reset_query = DISCARD ALL
 
-# Lets PostgREST and pg's Node driver send extra_float_digits in the startup
-# packet without PgBouncer rejecting it.
-ignore_startup_parameters = extra_float_digits
+# Startup parameters the clients send that PgBouncer would otherwise reject.
+# extra_float_digits — PostgREST's libpq sets it. statement_timeout — Node's
+# pg driver sets it from Pool({ statement_timeout: ... }). PgBouncer drops
+# these silently, so we enforce the real statement_timeout on the role itself
+# (ALTER ROLE) rather than relying on the client-side setting.
+ignore_startup_parameters = extra_float_digits,statement_timeout
 
 # Required when running unprivileged on Alpine — pidfile lives in the
 # writable runtime dir, not /var/run/pgbouncer (read-only in some setups).

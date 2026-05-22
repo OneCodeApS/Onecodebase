@@ -34,6 +34,32 @@ Sorted roughly by when it bites, not by effort.
 
 ---
 
+## Auth follow-ups (from the verify_jwt rollout)
+
+### CORS on `/functions/v1/*`
+Edge functions now accept JWTs but don't set CORS headers. Browser apps calling from a different origin (e.g., your client app hosted on `app.example.com` calling `api.example.com/functions/v1/foo`) will hit CORS errors before the JWT ever gets checked.
+
+- **Fix:** add `Access-Control-Allow-Origin`, `-Methods`, `-Headers` to the route response, plus an `OPTIONS` preflight handler. Either allow `*` (since the JWT is the actual gate) or make it a per-function setting.
+- **Note:** the dashboard's `apikey` header is non-standard, so `Access-Control-Allow-Headers` must include it explicitly.
+
+### Per-function role policy
+`verify_jwt` is binary today: any signed JWT works (anon / authenticated / service_role). For most functions an admin probably wants more: "only authenticated users, not anon" or "service_role only".
+
+- **Fix:** add a `min_role` column (`anon` / `authenticated` / `service_role`), enforced in the HTTP route. Function code stops needing the `if (ctx.user?.role === "anon") return 401` boilerplate.
+
+### Key rotation runbook
+The `/admin/api-keys` page tells you "rotating PGRST_JWT_SECRET invalidates everything" but doesn't give a procedure. Worth a short doc — when to rotate, the actual command sequence, what gets signed out, expected downtime.
+
+### Function-level audit search
+Failed JWT attempts get audited (`success=false`, `metadata.error: 'invalid_token' | 'missing_token'`). The invocations page shows them but there's no easy way to ask "show me all 401s for `foo` in the last hour" — useful when something's misbehaving.
+
+- **Fix:** add status / error filters to `/admin/functions/[name]/invocations`. Or just a "failed only" toggle.
+
+### PostgREST schema-cache reload button
+Now doubly relevant: `verify_jwt` checks happen in the dashboard, but the underlying tables PostgREST exposes also need its cache to be up to date after DDL. `PGRST_DB_CHANNEL_ENABLED=false` (PgBouncer compat) means today's only option is `docker compose restart postgrest`. An admin button issuing `NOTIFY pgrst, '"reload"'` is the obvious fix and was already noted under Operational.
+
+---
+
 ## Latent / operational
 
 ### `postgres/init/*.sql` is behind `postgres/migrations/*.sql`

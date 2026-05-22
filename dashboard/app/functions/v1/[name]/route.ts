@@ -1,10 +1,28 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { verifyJwtSignature } from "@/lib/auth-jwt";
+import { audit } from "@/lib/audit";
 import {
   auditInvocation,
   executeFunction,
   FUNCTION_NAME,
   getFunction,
+  type FunctionCaller,
 } from "@/lib/functions";
+
+// Extracts a JWT from, in priority order:
+//   1. Authorization: Bearer <token>           — standard, what user JWTs use
+//   2. apikey: <token>                          — what Supabase clients send
+//                                                 for anon / service_role keys
+//   3. ?token=<token>                           — for EventSource / browser
+//                                                 fetches that can't set headers
+function extractToken(req: NextRequest): string | null {
+  const auth = req.headers.get("authorization") ?? "";
+  const m = auth.match(/^Bearer\s+(.+)$/i);
+  if (m) return m[1];
+  const apikey = req.headers.get("apikey");
+  if (apikey) return apikey;
+  return req.nextUrl.searchParams.get("token") || null;
+}
 
 async function handle(
   req: NextRequest,
@@ -20,7 +38,66 @@ async function handle(
   }
 
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
-  const result = await executeFunction(fn, req);
+
+  // JWT gate. When verify_jwt is on (default), only valid tokens signed with
+  // PGRST_JWT_SECRET get through. Same secret PostgREST uses, so any token
+  // issued by /auth/v1/* works here automatically. Service-role tokens
+  // (minted offline with the same secret) work too.
+  let caller: FunctionCaller | null = null;
+  if (fn.verify_jwt) {
+    const token = extractToken(req);
+    if (!token) {
+      await audit({
+        actor: "<edge-function-caller>",
+        actorId: null,
+        role: null,
+        action: "function.invoke",
+        target: fn.name,
+        success: false,
+        ip,
+        metadata: {
+          method: req.method,
+          trigger: "http",
+          error: "missing_token",
+        },
+      });
+      return NextResponse.json(
+        { error: "missing_token" },
+        { status: 401, headers: { "WWW-Authenticate": "Bearer" } },
+      );
+    }
+    try {
+      // Signature-only verification. Accepts anon / authenticated /
+      // service_role tokens — function code differentiates via ctx.user.role.
+      const claims = await verifyJwtSignature(token);
+      caller = {
+        id: typeof claims.sub === "string" ? claims.sub : null,
+        email: typeof claims.email === "string" ? claims.email : null,
+        role: typeof claims.role === "string" ? claims.role : null,
+      };
+    } catch {
+      await audit({
+        actor: "<edge-function-caller>",
+        actorId: null,
+        role: null,
+        action: "function.invoke",
+        target: fn.name,
+        success: false,
+        ip,
+        metadata: {
+          method: req.method,
+          trigger: "http",
+          error: "invalid_token",
+        },
+      });
+      return NextResponse.json(
+        { error: "invalid_token" },
+        { status: 401, headers: { "WWW-Authenticate": "Bearer" } },
+      );
+    }
+  }
+
+  const result = await executeFunction(fn, req, caller);
 
   await auditInvocation(fn, req.method, result, { kind: "http" }, ip);
 

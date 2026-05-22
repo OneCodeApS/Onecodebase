@@ -78,11 +78,12 @@ export async function saveOverview(formData: FormData) {
   const name = String(formData.get("name") ?? "");
   const description = String(formData.get("description") ?? "").trim() || null;
   const enabled = formData.get("enabled") === "on";
+  const verifyJwt = formData.get("verify_jwt") === "on";
   const timeoutMs = clamp(Number(formData.get("timeout_ms") ?? 5000), 100, 60000);
 
   await updateFunction(
     name,
-    { description, enabled, timeout_ms: timeoutMs },
+    { description, enabled, timeout_ms: timeoutMs, verify_jwt: verifyJwt },
     session.userId ?? null,
   );
 
@@ -95,7 +96,13 @@ export async function saveOverview(formData: FormData) {
     success: true,
     ip,
     sessionId: session.sessionId ?? null,
-    metadata: { name, enabled, timeout_ms: timeoutMs, tab: "overview" },
+    metadata: {
+      name,
+      enabled,
+      timeout_ms: timeoutMs,
+      verify_jwt: verifyJwt,
+      tab: "overview",
+    },
   });
 
   revalidatePath(`/admin/functions/${encodeURIComponent(name)}`);

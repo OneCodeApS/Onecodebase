@@ -58,6 +58,33 @@ export default async function OverviewPage({
             </span>
           </label>
 
+          <label className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              name="verify_jwt"
+              defaultChecked={fn.verify_jwt}
+              className="mt-1 h-4 w-4 accent-emerald-500"
+            />
+            <span>
+              <span className="block text-sm font-medium text-neutral-200">
+                Verify JWT
+              </span>
+              <span className="block text-xs text-neutral-500">
+                Require a valid JWT in{" "}
+                <span className="font-mono">Authorization: Bearer …</span>{" "}
+                (or <span className="font-mono">?token=</span>). Tokens are
+                verified with the shared <span className="font-mono">PGRST_JWT_SECRET</span>
+                {" "}— anything that authenticates against PostgREST works here.
+                Cron-triggered runs always bypass this check.
+              </span>
+              {!fn.verify_jwt && (
+                <span className="mt-1 block rounded border border-amber-900/50 bg-amber-950/30 px-2 py-1 text-xs text-amber-300">
+                  This function is currently public — anyone can invoke it.
+                </span>
+              )}
+            </span>
+          </label>
+
           <div>
             <label
               htmlFor="ov-description"

@@ -9,15 +9,26 @@ export type EdgeFunction = {
   code: string;
   env: Record<string, string>;
   timeout_ms: number;
+  verify_jwt: boolean;
   created_at: Date;
   updated_at: Date;
+};
+
+// Caller identity passed into ctx.user. Null when the function ran with
+// verify_jwt=false (truly public) or via cron. When verify_jwt=true the
+// caller is whatever the JWT claims describe; for anon and service_role
+// tokens, id/email are typically absent.
+export type FunctionCaller = {
+  id: string | null;
+  email: string | null;
+  role: string | null;
 };
 
 export const FUNCTION_NAME = /^[a-z][a-z0-9_-]{0,62}$/;
 
 export async function listFunctions(): Promise<EdgeFunction[]> {
   const { rows } = await pool().query<EdgeFunction>(
-    `SELECT name, description, enabled, code, env, timeout_ms,
+    `SELECT name, description, enabled, code, env, timeout_ms, verify_jwt,
             created_at, updated_at
        FROM _dashboard.functions
        ORDER BY name`,
@@ -27,7 +38,7 @@ export async function listFunctions(): Promise<EdgeFunction[]> {
 
 export async function getFunction(name: string): Promise<EdgeFunction | null> {
   const { rows } = await pool().query<EdgeFunction>(
-    `SELECT name, description, enabled, code, env, timeout_ms,
+    `SELECT name, description, enabled, code, env, timeout_ms, verify_jwt,
             created_at, updated_at
        FROM _dashboard.functions WHERE name = $1`,
     [name],
@@ -64,6 +75,7 @@ export async function updateFunction(
     code?: string;
     env?: Record<string, string>;
     timeout_ms?: number;
+    verify_jwt?: boolean;
   },
   updatedBy: string | null,
 ): Promise<void> {
@@ -74,7 +86,8 @@ export async function updateFunction(
             code        = COALESCE($4, code),
             env         = COALESCE($5::jsonb, env),
             timeout_ms  = COALESCE($6, timeout_ms),
-            updated_by  = $7,
+            verify_jwt  = COALESCE($7, verify_jwt),
+            updated_by  = $8,
             updated_at  = now()
       WHERE name = $1`,
     [
@@ -84,6 +97,7 @@ export async function updateFunction(
       patch.code ?? null,
       patch.env ? JSON.stringify(patch.env) : null,
       patch.timeout_ms ?? null,
+      patch.verify_jwt ?? null,
       updatedBy,
     ],
   );
@@ -100,6 +114,10 @@ function defaultStarterCode(name: string): string {
 //   ctx.env       — environment variables. Manage them under
 //                   Edge functions → Environment variables.
 //                   Use in code as ctx.env.MY_KEY.
+//   ctx.user      — the caller's JWT claims when verify_jwt is on:
+//                   { id, email, role }. Each field may be null.
+//                   role is "anon" | "authenticated" | "service_role" | ...
+//                   null when verify_jwt is off or cron-triggered.
 //   ctx.db.query  — Postgres query, runs as dashboard_admin.
 //                   Example: await ctx.db.query("SELECT 1")
 //   fetch, Response, URL, Headers, crypto — Web standards.
@@ -220,6 +238,7 @@ export type ExecResult =
 export async function executeFunction(
   fn: EdgeFunction,
   req: Request,
+  caller: FunctionCaller | null = null,
 ): Promise<ExecResult> {
   const started = Date.now();
   try {
@@ -236,6 +255,7 @@ export async function executeFunction(
 
     const ctx = {
       env,
+      user: caller,
       db: {
         query: (sql: string, params?: unknown[]) =>
           pool().query(sql, params as unknown[] | undefined),

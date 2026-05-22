@@ -122,6 +122,10 @@ services:
       # PgBouncer entirely and talks straight to Postgres.
       REALTIME_DATABASE_URL: postgres://dashboard_admin:${DASHBOARD_ADMIN_PASSWORD}@postgres:5432/${POSTGRES_DB:-postgres}
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET must be set}
+      # Shared with PostgREST so JWTs signed here verify there and vice versa.
+      # Used by /auth/v1/* (signing user tokens), /realtime (auth), and the
+      # edge-function gate at /functions/v1/* (when verify_jwt is on).
+      PGRST_JWT_SECRET: ${PGRST_JWT_SECRET:?PGRST_JWT_SECRET must be set}
       MINIO_ENDPOINT: minio
       MINIO_PORT: "9000"
       MINIO_USE_SSL: "false"

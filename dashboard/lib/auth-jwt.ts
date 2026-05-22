@@ -44,3 +44,47 @@ export async function verifyAccessToken(token: string): Promise<AccessClaims> {
   }
   return payload as AccessClaims;
 }
+
+// Looser sibling of verifyAccessToken. Validates only the signature and the
+// algorithm — no claim shape requirements. Lets a single JWT_SECRET cover
+// the same three roles Supabase uses:
+//   - "anon"           — long-lived, embedded in client code (no sub/email)
+//   - "authenticated"  — per-user tokens issued by /auth/v1/* (has sub/email)
+//   - "service_role"   — server-side admin tokens (typically no sub/email)
+// Edge functions read ctx.user.role to decide what the caller can do.
+export type AnyJwtClaims = JWTPayload & {
+  sub?: string;
+  email?: string;
+  role?: string;
+};
+
+export async function verifyJwtSignature(token: string): Promise<AnyJwtClaims> {
+  const { payload } = await jwtVerify(token, jwtSecret(), {
+    algorithms: ["HS256"],
+  });
+  return payload as AnyJwtClaims;
+}
+
+// Anon / service_role keys are deterministic — same JWT every call, given a
+// stable PGRST_JWT_SECRET. No iat (which would change them per generation);
+// a fixed far-future exp keeps libraries that require an exp claim happy.
+// Rotating the secret invalidates these keys (and every user JWT), so don't
+// rotate it casually.
+const KEYS_EXP_SECONDS = Math.floor(
+  new Date("2100-01-01T00:00:00Z").getTime() / 1000,
+);
+
+async function signFixedRoleKey(role: "anon" | "service_role"): Promise<string> {
+  return new SignJWT({ role })
+    .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+    .setExpirationTime(KEYS_EXP_SECONDS)
+    .sign(jwtSecret());
+}
+
+export function getAnonKey(): Promise<string> {
+  return signFixedRoleKey("anon");
+}
+
+export function getServiceRoleKey(): Promise<string> {
+  return signFixedRoleKey("service_role");
+}
