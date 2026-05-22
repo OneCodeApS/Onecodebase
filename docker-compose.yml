@@ -49,6 +49,11 @@ services:
       MINIO_BROWSER_REDIRECT_URL: ${MINIO_PUBLIC_URL:-http://files.localhost}
     volumes:
       - minio-data:/data
+    ports:
+      # Bound to loopback only — for `npm run dev` outside Docker to reach MinIO.
+      # In prod the dashboard container talks to `minio:9000` over the internal
+      # network and this mapping is irrelevant.
+      - "127.0.0.1:9000:9000"
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
       interval: 10s

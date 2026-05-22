@@ -24,16 +24,26 @@ const GROUPS: NavGroup[] = [
     items: [
       { href: "/tables", label: "Tables", match: "/tables" },
       { href: "/sql", label: "SQL Editor", match: "/sql" },
+      { href: "/admin/realtime", label: "Realtime", match: "/admin/realtime", adminOnly: true },
     ],
   },
-  // {
-  //   heading: "Storage",
-  //   items: [{ href: "/storage", label: "Files", match: "/storage" }],
-  // },
+  {
+    heading: "Functions",
+    items: [
+      { href: "/admin/functions", label: "Edge functions", match: "/admin/functions", adminOnly: true },
+      { href: "/admin/cron", label: "Cron jobs", match: "/admin/cron", adminOnly: true },
+    ],
+  },
+  {
+    heading: "Storage",
+    items: [{ href: "/storage", label: "Buckets", match: "/storage" }],
+  },
   {
     heading: "Authentication",
     items: [
-      { href: "/admin/users", label: "Users", match: "/admin/users", adminOnly: true },
+      { href: "/admin/auth-providers", label: "Auth providers", match: "/admin/auth-providers", adminOnly: true },
+      { href: "/admin/end-users", label: "End users", match: "/admin/end-users", adminOnly: true },
+      { href: "/admin/users", label: "Dashboard users", match: "/admin/users", adminOnly: true },
     ],
   },
   {

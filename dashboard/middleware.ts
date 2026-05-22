@@ -11,10 +11,34 @@ function isAdminPath(pathname: string): boolean {
   return pathname === "/admin" || pathname.startsWith("/admin/");
 }
 
+// End-user auth API — public, called by external apps with their own bearer
+// token (or no token, for sign-up / sign-in). Dashboard session is irrelevant
+// here.
+function isPublicAuthApi(pathname: string): boolean {
+  return pathname.startsWith("/auth/v1/");
+}
+
+// Realtime SSE stream — authenticates via Bearer token / ?token= itself, no
+// dashboard session needed.
+function isRealtimeApi(pathname: string): boolean {
+  return pathname === "/realtime" || pathname.startsWith("/realtime/");
+}
+
+// Edge functions — function authors choose their own auth model; the
+// dashboard doesn't gate access.
+function isFunctionsApi(pathname: string): boolean {
+  return pathname.startsWith("/functions/v1/");
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  if (PUBLIC_PATHS.has(pathname)) {
+  if (
+    PUBLIC_PATHS.has(pathname) ||
+    isPublicAuthApi(pathname) ||
+    isRealtimeApi(pathname) ||
+    isFunctionsApi(pathname)
+  ) {
     return NextResponse.next();
   }
 
