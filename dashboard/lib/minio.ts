@@ -4,7 +4,7 @@ declare global {
   // eslint-disable-next-line no-var
   var __minioClient: Client | undefined;
   // eslint-disable-next-line no-var
-  var __minioPublicClient: Client | null | undefined;
+  var __minioPublicClient: Client | undefined;
 }
 
 function buildClient(): Client {
@@ -23,21 +23,31 @@ function buildClient(): Client {
   });
 }
 
-// Internal client — used by the dashboard process to perform bucket / object
-// operations. In Docker this connects to `minio:9000` over the bridge network.
-export const minio: Client = globalThis.__minioClient ?? buildClient();
-if (process.env.NODE_ENV !== "production") {
-  globalThis.__minioClient = minio;
+function resolveInternal(): Client {
+  if (!globalThis.__minioClient) {
+    globalThis.__minioClient = buildClient();
+  }
+  return globalThis.__minioClient;
 }
 
-// Public-facing client — same credentials but configured with the hostname
-// the user's browser will actually use. Returned URLs (presigned GET, etc.)
-// need a host the browser can resolve, which is NOT `minio:9000` in Docker.
+// Internal client — used by the dashboard process to perform bucket / object
+// operations. In Docker this connects to `minio:9000` over the bridge network.
 //
-// Configured from MINIO_PUBLIC_URL (e.g. "https://files.example.com" in prod,
-// "http://127.0.0.1:9000" in `npm run dev`). Falls back to the internal client
-// if MINIO_PUBLIC_URL isn't set, but generated URLs probably won't work from
-// the browser in that case.
+// Wrapped in a Proxy so the underlying Client is constructed on first method
+// access, not at module load. Required because `next build` evaluates this
+// module while collecting page data — env vars aren't available at that point
+// and the old eager construction crashed the build.
+export const minio: Client = new Proxy({} as Client, {
+  get(_t, prop, receiver) {
+    const target = resolveInternal();
+    const value = Reflect.get(target, prop, target);
+    return typeof value === "function" ? value.bind(target) : value;
+  },
+});
+
+// Public-facing client — same credentials but configured with the hostname
+// the user's browser will actually use (presigned GET URLs, etc.). Configured
+// from MINIO_PUBLIC_URL; falls back to the internal client if not set.
 function buildPublicClient(): Client | null {
   const publicUrl = process.env.MINIO_PUBLIC_URL;
   const accessKey = process.env.MINIO_ACCESS_KEY;
@@ -57,11 +67,20 @@ function buildPublicClient(): Client | null {
   }
 }
 
-export const minioPublic: Client =
-  globalThis.__minioPublicClient ?? buildPublicClient() ?? minio;
-if (process.env.NODE_ENV !== "production") {
-  globalThis.__minioPublicClient = minioPublic;
+function resolvePublic(): Client {
+  if (!globalThis.__minioPublicClient) {
+    globalThis.__minioPublicClient = buildPublicClient() ?? resolveInternal();
+  }
+  return globalThis.__minioPublicClient;
 }
+
+export const minioPublic: Client = new Proxy({} as Client, {
+  get(_t, prop, receiver) {
+    const target = resolvePublic();
+    const value = Reflect.get(target, prop, target);
+    return typeof value === "function" ? value.bind(target) : value;
+  },
+});
 
 // Returns the public, browser-friendly base URL (e.g. "https://files.example.com")
 // or null if MINIO_PUBLIC_URL isn't configured.
