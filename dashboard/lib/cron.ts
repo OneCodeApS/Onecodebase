@@ -1,6 +1,6 @@
 import cron, { type ScheduledTask } from "node-cron";
 import { pool } from "./db";
-import { executeFunction, getFunction } from "./functions";
+import { auditInvocation, executeFunction, getFunction } from "./functions";
 
 export type CronJob = {
   name: string;
@@ -136,6 +136,11 @@ async function runJob(name: string): Promise<void> {
   });
 
   const result = await executeFunction(fn, req);
+
+  // Mirror HTTP-route behaviour so cron-driven calls also show up on the
+  // function's invocations page. Pass the cron job name as the trigger.
+  await auditInvocation(fn, "POST", result, { kind: "cron", job: name }, null);
+
   if (result.ok) {
     await pool().query(
       `UPDATE _dashboard.cron_jobs

@@ -1,5 +1,6 @@
 import { pool } from "./db";
 import { getEnvForFunction } from "./function-env";
+import { audit } from "./audit";
 
 export type EdgeFunction = {
   name: string;
@@ -132,6 +133,42 @@ export function validateFunctionCode(code: string): string | null {
   } catch (e) {
     return ((e as Error).message || "Invalid code").split("\n")[0];
   }
+}
+
+// Writes one audit row per invocation. Shared by the HTTP route and the cron
+// runner so cron-driven invocations also show up on the invocations page.
+//
+// trigger.kind is the only required discriminator; cron carries the job name
+// as `trigger.job` so the invocations page can show "cron: <job>".
+export type InvocationTrigger =
+  | { kind: "http" }
+  | { kind: "cron"; job: string };
+
+export async function auditInvocation(
+  fn: EdgeFunction,
+  method: string,
+  result: ExecResult,
+  trigger: InvocationTrigger,
+  ip: string | null,
+): Promise<void> {
+  await audit({
+    actor: trigger.kind === "cron" ? `<cron:${trigger.job}>` : "<edge-function-caller>",
+    actorId: null,
+    role: null,
+    action: "function.invoke",
+    target: fn.name,
+    success: result.ok,
+    ip,
+    metadata: {
+      method,
+      trigger: trigger.kind,
+      ...(trigger.kind === "cron" ? { cron_job: trigger.job } : {}),
+      duration_ms: result.durationMs,
+      ...(result.ok
+        ? { status: result.response.status }
+        : { error: result.error.split("\n")[0] }),
+    },
+  });
 }
 
 // Executes the function. NOT a security boundary — admins are trusted.

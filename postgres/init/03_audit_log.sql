@@ -52,6 +52,7 @@ CREATE TABLE _dashboard.settings (
 );
 
 INSERT INTO _dashboard.settings (key, value) VALUES ('audit_subdir', '"default"'::jsonb);
+INSERT INTO _dashboard.settings (key, value) VALUES ('audit_retention_days', '30'::jsonb);
 
 GRANT ALL ON ALL TABLES    IN SCHEMA _dashboard TO dashboard_admin;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA _dashboard TO dashboard_admin;

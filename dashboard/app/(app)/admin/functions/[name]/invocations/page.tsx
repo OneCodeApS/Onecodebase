@@ -47,6 +47,7 @@ export default async function InvocationsPage({
         <thead>
           <tr className="border-b border-neutral-700 bg-neutral-800/60 text-left text-neutral-400">
             <th className="px-3 py-2 font-normal">When</th>
+            <th className="px-3 py-2 font-normal">Trigger</th>
             <th className="px-3 py-2 font-normal">Method</th>
             <th className="px-3 py-2 font-normal text-right">Status</th>
             <th className="px-3 py-2 font-normal text-right">Duration</th>
@@ -57,7 +58,7 @@ export default async function InvocationsPage({
         <tbody>
           {invocations.length === 0 ? (
             <tr>
-              <td colSpan={6} className="px-3 py-6 text-center text-neutral-500">
+              <td colSpan={7} className="px-3 py-6 text-center text-neutral-500">
                 No invocations yet.
               </td>
             </tr>
@@ -68,6 +69,16 @@ export default async function InvocationsPage({
               const duration = meta.duration_ms as number | undefined;
               const method = meta.method as string | undefined;
               const error = (meta.error as string | undefined) ?? null;
+              const trigger = meta.trigger as string | undefined;
+              const cronJob = meta.cron_job as string | undefined;
+              const triggerLabel =
+                trigger === "cron"
+                  ? cronJob
+                    ? `cron: ${cronJob}`
+                    : "cron"
+                  : trigger === "http"
+                    ? "HTTP"
+                    : "—";
               return (
                 <tr
                   key={i.id}
@@ -75,6 +86,9 @@ export default async function InvocationsPage({
                 >
                   <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-neutral-400">
                     {formatTime(i.created_at)}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-neutral-300">
+                    {triggerLabel}
                   </td>
                   <td className="px-3 py-2 font-mono text-neutral-300">
                     {method ?? "—"}

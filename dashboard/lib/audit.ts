@@ -5,6 +5,11 @@ import { pool } from "./db";
 import { getSetting } from "./settings";
 import type { UserRole } from "./session";
 
+// Settings key that holds the hash of the most-recently-pruned row. The
+// chain verifier uses this as its initial expectedPrev so verification
+// still works on the retained window after pruning.
+export const CHAIN_ANCHOR_KEY = "audit_chain_anchor";
+
 // Constant key for the Postgres advisory lock that serialises audit-log
 // inserts. Ensures only one writer at a time computes prev_hash → hash,
 // so the chain is never corrupted by concurrent inserts.
@@ -93,6 +98,26 @@ export async function audit(entry: AuditEntry): Promise<void> {
       "SELECT hash FROM _dashboard.audit_log ORDER BY id DESC LIMIT 1",
     );
     prevHash = prev.rows[0]?.hash ?? null;
+
+    // Edge case: retention pruned every row. Chain to the stored anchor
+    // (the last pruned row's hash) so history isn't silently restarted.
+    if (prevHash === null) {
+      const anchor = await client.query<{ value: string | null }>(
+        "SELECT value::text AS value FROM _dashboard.settings WHERE key = $1",
+        [CHAIN_ANCHOR_KEY],
+      );
+      const raw = anchor.rows[0]?.value;
+      if (raw) {
+        // value is stored as a JSON string; strip the wrapping quotes.
+        try {
+          const parsed = JSON.parse(raw);
+          if (typeof parsed === "string") prevHash = parsed;
+        } catch {
+          // Malformed anchor — fall back to genesis. Better than throwing
+          // and blocking the audit insert.
+        }
+      }
+    }
 
     const now = new Date();
     body = {

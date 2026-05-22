@@ -1,10 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import {
+  auditInvocation,
   executeFunction,
   FUNCTION_NAME,
   getFunction,
 } from "@/lib/functions";
-import { audit } from "@/lib/audit";
 
 async function handle(
   req: NextRequest,
@@ -22,24 +22,7 @@ async function handle(
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
   const result = await executeFunction(fn, req);
 
-  // Audit every invocation so admins can spot misuse / failures without
-  // grepping container logs.
-  await audit({
-    actor: "<edge-function-caller>",
-    actorId: null,
-    role: null,
-    action: "function.invoke",
-    target: name,
-    success: result.ok,
-    ip,
-    metadata: {
-      method: req.method,
-      duration_ms: result.durationMs,
-      ...(result.ok
-        ? { status: result.response.status }
-        : { error: result.error.split("\n")[0] }),
-    },
-  });
+  await auditInvocation(fn, req.method, result, { kind: "http" }, ip);
 
   if (!result.ok) {
     return NextResponse.json(

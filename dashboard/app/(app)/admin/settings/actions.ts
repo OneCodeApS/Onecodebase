@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { getSetting, setSetting } from "@/lib/settings";
 import { audit } from "@/lib/audit";
+import { pruneOldAuditRows } from "@/lib/audit-retention";
 
 async function clientIp(): Promise<string | null> {
   const h = await headers();
@@ -35,5 +36,68 @@ export async function updateAuditSubdir(formData: FormData) {
   });
 
   const msg = sanitized === raw ? `Saved: ${sanitized}` : `Saved (sanitized): ${sanitized}`;
+  redirect("/admin/settings?ok=" + encodeURIComponent(msg));
+}
+
+export async function updateAuditRetention(formData: FormData) {
+  const session = await getSession();
+  if (session.role !== "admin") redirect("/");
+
+  const raw = String(formData.get("days") ?? "").trim();
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0 || !Number.isInteger(n)) {
+    redirect(
+      "/admin/settings?error=" +
+        encodeURIComponent("Retention must be a non-negative integer (0 = keep forever)."),
+    );
+  }
+
+  const previous = (await getSetting<number>("audit_retention_days")) ?? 30;
+  await setSetting("audit_retention_days", n, session.userId ?? null);
+
+  await audit({
+    actor: session.email!,
+    actorId: session.userId!,
+    role: "admin",
+    action: "settings.audit_retention.update",
+    target: "audit_retention_days",
+    ip: await clientIp(),
+    sessionId: session.sessionId ?? null,
+    metadata: { from: previous, to: n },
+  });
+
+  const msg = n === 0 ? "Retention disabled (keep forever)" : `Retention: ${n} day(s)`;
+  redirect("/admin/settings?ok=" + encodeURIComponent(msg));
+}
+
+export async function runAuditPruneNow() {
+  const session = await getSession();
+  if (session.role !== "admin") redirect("/");
+
+  const result = await pruneOldAuditRows();
+
+  // pruneOldAuditRows() writes its own audit.prune row, so no extra audit
+  // call here. But we do want to capture that an admin triggered it.
+  await audit({
+    actor: session.email!,
+    actorId: session.userId!,
+    role: "admin",
+    action: "audit.prune.manual",
+    ip: await clientIp(),
+    sessionId: session.sessionId ?? null,
+    metadata: {
+      retention_days: result.retentionDays,
+      deleted: result.deleted,
+      anchor_id: result.anchorId,
+      cutoff: result.cutoff,
+    },
+  });
+
+  const msg =
+    result.retentionDays <= 0
+      ? "Retention is disabled (0 days). No rows pruned."
+      : result.deleted === 0
+        ? `Nothing to prune (no rows older than ${result.retentionDays} day(s)).`
+        : `Pruned ${result.deleted} row(s) older than ${result.retentionDays} day(s).`;
   redirect("/admin/settings?ok=" + encodeURIComponent(msg));
 }
