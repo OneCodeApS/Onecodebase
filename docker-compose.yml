@@ -2,6 +2,13 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    # Headroom over the combined pools (dashboard 30 + PostgREST 30 + ad-hoc
+    # admin connections). 150 fits within the 2 GB recommended RAM — each
+    # backend costs ~10 MB. Bump to ~300 once PgBouncer is in front.
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=150"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-postgres}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -23,18 +30,58 @@ services:
     networks:
       - backend
 
+  # Connection pooler in transaction mode. Lets PostgREST and the dashboard
+  # multiplex many client connections onto a smaller, configurable number of
+  # actual Postgres backends — important once traffic grows past a couple
+  # hundred concurrent users. Realtime SSE bypasses this (it needs session
+  # state for LISTEN), connecting directly to postgres:5432.
+  pgbouncer:
+    build:
+      context: ./pgbouncer
+    restart: unless-stopped
+    environment:
+      AUTHENTICATOR_PASSWORD: ${AUTHENTICATOR_PASSWORD:?AUTHENTICATOR_PASSWORD must be set}
+      DASHBOARD_ADMIN_PASSWORD: ${DASHBOARD_ADMIN_PASSWORD:?DASHBOARD_ADMIN_PASSWORD must be set}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: "1000"
+      DEFAULT_POOL_SIZE: "30"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # PgBouncer accepts plain TCP — a successful connect is enough.
+      test: ["CMD-SHELL", "nc -z localhost 6432 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - backend
+
   postgrest:
     image: postgrest/postgrest:v12.2.3
     restart: unless-stopped
     environment:
-      PGRST_DB_URI: postgres://authenticator:${AUTHENTICATOR_PASSWORD}@postgres:5432/${POSTGRES_DB:-postgres}
+      # Routes via PgBouncer so PostgREST traffic is multiplexed too.
+      PGRST_DB_URI: postgres://authenticator:${AUTHENTICATOR_PASSWORD}@pgbouncer:6432/${POSTGRES_DB:-postgres}
       PGRST_DB_SCHEMAS: public
       PGRST_DB_ANON_ROLE: anon
       PGRST_JWT_SECRET: ${PGRST_JWT_SECRET:?PGRST_JWT_SECRET must be set}
       PGRST_OPENAPI_SERVER_PROXY_URI: ${API_PUBLIC_URL:-http://api.localhost}
-      PGRST_DB_POOL: "10"
+      PGRST_DB_POOL: "30"
+      # PostgREST sets some startup params PgBouncer would otherwise reject.
+      # The pooler's ignore_startup_parameters covers extra_float_digits; this
+      # disables PostgREST's prepared-statement use so transaction-pooled
+      # connections can be reused freely.
+      PGRST_DB_PREPARED_STATEMENTS: "false"
+      # PostgREST's schema-cache reload uses LISTEN on the `pgrst` channel,
+      # which doesn't survive transaction-pooled connections. Disable it —
+      # schema changes require a `docker compose restart postgrest` instead.
+      PGRST_DB_CHANNEL_ENABLED: "false"
     depends_on:
-      postgres:
+      pgbouncer:
         condition: service_healthy
     networks:
       - backend
@@ -69,7 +116,11 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgres://dashboard_admin:${DASHBOARD_ADMIN_PASSWORD}@postgres:5432/${POSTGRES_DB:-postgres}
+      # General queries go through PgBouncer (transaction-pooled).
+      DATABASE_URL: postgres://dashboard_admin:${DASHBOARD_ADMIN_PASSWORD}@pgbouncer:6432/${POSTGRES_DB:-postgres}
+      # Realtime LISTEN/NOTIFY needs a session-pinned connection, so it skips
+      # PgBouncer entirely and talks straight to Postgres.
+      REALTIME_DATABASE_URL: postgres://dashboard_admin:${DASHBOARD_ADMIN_PASSWORD}@postgres:5432/${POSTGRES_DB:-postgres}
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET must be set}
       MINIO_ENDPOINT: minio
       MINIO_PORT: "9000"
@@ -84,6 +135,8 @@ services:
       - ${AUDIT_HOST_PATH:-./audit-logs}:/audit
     depends_on:
       postgres:
+        condition: service_healthy
+      pgbouncer:
         condition: service_healthy
     networks:
       - backend

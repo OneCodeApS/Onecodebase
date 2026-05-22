@@ -135,6 +135,46 @@ export function validateFunctionCode(code: string): string | null {
   }
 }
 
+// Compiling user code with `new AsyncFunction(...)` is CPU work that doesn't
+// need to repeat per invocation. Cache the compiled body keyed by name +
+// updated_at, so an edit busts the cache (updateFunction sets updated_at =
+// now()) but repeat calls hit instantly. Bounded memory: we drop other
+// entries for the same name on miss, so at most N entries (one per function).
+type CompiledFn = (req: Request, ctx: unknown) => Promise<unknown>;
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __fnCompileCache: Map<string, CompiledFn> | undefined;
+}
+
+function getCompiled(fn: EdgeFunction): CompiledFn {
+  if (!globalThis.__fnCompileCache) {
+    globalThis.__fnCompileCache = new Map();
+  }
+  const cache = globalThis.__fnCompileCache;
+  const updatedAtMs =
+    fn.updated_at instanceof Date
+      ? fn.updated_at.getTime()
+      : new Date(fn.updated_at).getTime();
+  const key = `${fn.name}:${updatedAtMs}`;
+
+  const hit = cache.get(key);
+  if (hit) return hit;
+
+  // Drop any stale entries for this name (older versions).
+  for (const k of cache.keys()) {
+    if (k !== key && k.startsWith(`${fn.name}:`)) cache.delete(k);
+  }
+
+  const compiled = new (AsyncFunctionCtor as new (...args: string[]) => CompiledFn)(
+    "req",
+    "ctx",
+    fn.code,
+  );
+  cache.set(key, compiled);
+  return compiled;
+}
+
 // Writes one audit row per invocation. Shared by the HTTP route and the cron
 // runner so cron-driven invocations also show up on the invocations page.
 //
@@ -183,16 +223,11 @@ export async function executeFunction(
 ): Promise<ExecResult> {
   const started = Date.now();
   try {
-    // Build an AsyncFunction from the user's code. This is full-Node trust;
-    // any escape from a user-written function = full process access. Hence
-    // the "admin only" constraint on who can create/edit functions.
-    const compiled = new (AsyncFunctionCtor as new (
-      ...args: string[]
-    ) => (req: Request, ctx: unknown) => Promise<unknown>)(
-      "req",
-      "ctx",
-      fn.code,
-    );
+    // Compiled function bodies are cached by name + updated_at (see
+    // getCompiled). Repeat invocations reuse the same AsyncFunction; edits
+    // bust the cache automatically. Full-Node trust either way — admin-only
+    // constraint on create/edit is what keeps this safe.
+    const compiled = getCompiled(fn);
 
     // Merge global function_env vars with per-function overrides. Globals
     // come from _dashboard.function_env, per-function lives on the function

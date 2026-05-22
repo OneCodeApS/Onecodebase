@@ -42,9 +42,11 @@ Open `.env` in an editor and fill in every blank. Generate values with:
 
 ```bash
 openssl rand -hex 32       # SESSION_SECRET, PGRST_JWT_SECRET
-openssl rand -base64 24    # each *_PASSWORD and MINIO_ROOT_PASSWORD
+openssl rand -hex 24       # each *_PASSWORD and MINIO_ROOT_PASSWORD
 openssl rand -hex 8        # MINIO_ROOT_USER
 ```
+
+Use hex (not base64) for passwords that end up in Postgres connection strings — `/` and `+` from base64 can break URL parsing of the connection string.
 
 These commands work identically in PowerShell once Git for Windows is installed. Leave the `*_HOST`, `*_PUBLIC_URL`, and `CADDY_TLS=internal` lines at their defaults — they're already set up for `*.localhost`. Leave `GHCR_OWNER` blank; it's only used by the production overlay.
 
@@ -227,8 +229,10 @@ Generate strong secrets:
 
 ```bash
 openssl rand -hex 32       # use this for SESSION_SECRET and PGRST_JWT_SECRET
-openssl rand -base64 24    # use this for each *_PASSWORD value (run once per password)
+openssl rand -hex 24       # use this for each *_PASSWORD value (run once per password)
 ```
+
+(Hex, not base64 — `/` and `+` from base64 break the URL form of Postgres connection strings.)
 
 Open `.env` in an editor (`nano .env`) and fill in every blank. Set these to your real values:
 

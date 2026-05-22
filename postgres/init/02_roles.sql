@@ -28,6 +28,11 @@ GRANT service_role TO authenticator;
 CREATE ROLE dashboard_admin LOGIN BYPASSRLS PASSWORD :'dashboard_admin_pw';
 GRANT ALL ON DATABASE postgres TO dashboard_admin;
 
+-- pg_read_all_stats lets the Home page's DB-health card see connections and
+-- stats from every role (PostgREST's authenticator, postgres, etc.), not
+-- just dashboard_admin's own sessions. Read-only stats access; no data access.
+GRANT pg_read_all_stats TO dashboard_admin;
+
 -- dashboard_admin needs full access to public so the dashboard's table browser,
 -- SQL editor, etc. can read/modify any user data.
 GRANT USAGE, CREATE ON SCHEMA public TO dashboard_admin;
