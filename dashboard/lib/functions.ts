@@ -119,6 +119,21 @@ return Response.json({
 `;
 }
 
+// Compile-checks user code with the same AsyncFunction step the executor
+// uses, without running it. Returns null if valid, or a one-line message
+// describing the SyntaxError.
+const AsyncFunctionCtor = Object.getPrototypeOf(async function () {})
+  .constructor as new (...args: string[]) => unknown;
+
+export function validateFunctionCode(code: string): string | null {
+  try {
+    new AsyncFunctionCtor("req", "ctx", code);
+    return null;
+  } catch (e) {
+    return ((e as Error).message || "Invalid code").split("\n")[0];
+  }
+}
+
 // Executes the function. NOT a security boundary — admins are trusted.
 // Returns whatever the function returns (Response or anything JSON-able).
 export type ExecResult =
@@ -134,10 +149,13 @@ export async function executeFunction(
     // Build an AsyncFunction from the user's code. This is full-Node trust;
     // any escape from a user-written function = full process access. Hence
     // the "admin only" constraint on who can create/edit functions.
-    const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as new (
+    const compiled = new (AsyncFunctionCtor as new (
       ...args: string[]
-    ) => (req: Request, ctx: unknown) => Promise<unknown>;
-    const compiled = new AsyncFunction("req", "ctx", fn.code);
+    ) => (req: Request, ctx: unknown) => Promise<unknown>)(
+      "req",
+      "ctx",
+      fn.code,
+    );
 
     // Merge global function_env vars with per-function overrides. Globals
     // come from _dashboard.function_env, per-function lives on the function

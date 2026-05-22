@@ -10,6 +10,7 @@ import {
   deleteFunction,
   FUNCTION_NAME,
   updateFunction,
+  validateFunctionCode,
 } from "@/lib/functions";
 
 async function requireAdmin() {
@@ -110,6 +111,14 @@ export async function saveCode(formData: FormData) {
 
   const name = String(formData.get("name") ?? "");
   const code = String(formData.get("code") ?? "");
+
+  const syntaxError = validateFunctionCode(code);
+  if (syntaxError) {
+    redirect(
+      `/admin/functions/${encodeURIComponent(name)}/code?error=` +
+        encodeURIComponent(`Syntax error: ${syntaxError}`),
+    );
+  }
 
   await updateFunction(name, { code }, session.userId ?? null);
 
