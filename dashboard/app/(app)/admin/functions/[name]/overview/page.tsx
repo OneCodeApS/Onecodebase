@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { Card } from "../../../../_components/Card";
+import { ConfirmDeleteForm } from "../../../../_components/ConfirmDeleteForm";
 import { FUNCTION_NAME, getFunction } from "@/lib/functions";
 import { removeFunction, saveOverview } from "../../actions";
 
@@ -54,6 +55,33 @@ export default async function OverviewPage({
               <span className="block text-xs text-neutral-500">
                 When off, /functions/v1/{fn.name} returns 404.
               </span>
+            </span>
+          </label>
+
+          <label className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              name="verify_jwt"
+              defaultChecked={fn.verify_jwt}
+              className="mt-1 h-4 w-4 accent-emerald-500"
+            />
+            <span>
+              <span className="block text-sm font-medium text-neutral-200">
+                Verify JWT
+              </span>
+              <span className="block text-xs text-neutral-500">
+                Require a valid JWT in{" "}
+                <span className="font-mono">Authorization: Bearer …</span>{" "}
+                (or <span className="font-mono">?token=</span>). Tokens are
+                verified with the shared <span className="font-mono">PGRST_JWT_SECRET</span>
+                {" "}— anything that authenticates against PostgREST works here.
+                Cron-triggered runs always bypass this check.
+              </span>
+              {!fn.verify_jwt && (
+                <span className="mt-1 block rounded border border-amber-900/50 bg-amber-950/30 px-2 py-1 text-xs text-amber-300">
+                  This function is currently public — anyone can invoke it.
+                </span>
+              )}
             </span>
           </label>
 
@@ -126,15 +154,25 @@ export default async function OverviewPage({
         <p className="mt-1 text-sm text-neutral-500">
           Deletes the function record. Doesn't affect anything else in the DB.
         </p>
-        <form action={removeFunction} className="mt-4">
-          <input type="hidden" name="name" value={fn.name} />
-          <button
-            type="submit"
-            className="rounded border border-red-900/50 px-3 py-1.5 text-sm text-red-300 hover:bg-red-950/40"
+        <div className="mt-4">
+          <ConfirmDeleteForm
+            action={removeFunction}
+            triggerLabel="Delete function"
+            triggerClassName="rounded border border-red-900/50 px-3 py-1.5 text-sm text-red-300 hover:bg-red-950/40"
+            title="Delete function?"
+            confirmLabel="Delete function"
+            message={
+              <>
+                Permanently delete{" "}
+                <span className="font-mono text-neutral-100">{fn.name}</span>?
+                Any cron jobs that invoke it will start failing on their next run.
+                This cannot be undone.
+              </>
+            }
           >
-            Delete function
-          </button>
-        </form>
+            <input type="hidden" name="name" value={fn.name} />
+          </ConfirmDeleteForm>
+        </div>
       </Card>
     </div>
   );

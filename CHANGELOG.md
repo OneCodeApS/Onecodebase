@@ -8,6 +8,49 @@ While the project is on `0.x`, minor version bumps (`0.1 → 0.2`) may include b
 
 ## [Unreleased]
 
+Operability + performance pass. The home page now gives admins a live overview, audit-log growth is bounded by a configurable retention window, deletes go through a single confirmation modal, and the data path is sized for a few hundred concurrent users via connection pooling + edge-function compile caching.
+
+### Added
+
+- **Edge function JWT gate** — new `verify_jwt` flag on `_dashboard.functions`, default ON. When on, `/functions/v1/<name>` requires a valid JWT signed with `PGRST_JWT_SECRET` (the same secret PostgREST uses). Accepts `Authorization: Bearer <token>`, the `apikey:` header (Supabase-client convention), or `?token=` for `EventSource`-style callers. Missing or invalid tokens get `401` with an audit row. The function receives the verified claims as `ctx.user = { id, email, role }` (each nullable) — `role` is the discriminator (`"anon"` / `"authenticated"` / `"service_role"`). Cron-triggered runs bypass the gate (they never enter the HTTP route).
+- **API keys page** — `/admin/api-keys`. Renders the anon key (always visible) and the service-role key (masked behind a Reveal button) with copy buttons and inline guidance on which to use where. Both keys are deterministic JWTs derived from `PGRST_JWT_SECRET` (no `iat`, fixed `exp` of 2100-01-01) so they're stable across restarts. Every page visit writes an `api_keys.view` audit row.
+- **Home overview** — admin-only Resource counts (tables, storage objects, edge functions, cron jobs, end users, audit rows), Server capacity used (database size, object storage, audit JSONL files), and live Database health (`pg_stat_activity` connections, cache hit ratio with colour-coded thresholds, longest active query).
+- **Audit-log retention** — configurable from Admin → Audit settings. Defaults to 30 days. A daily in-process sweeper deletes rows older than `audit_retention_days`. Stores the last-deleted row's hash in `audit_chain_anchor` so the chain verifier still works on the retained window. Manual "Run prune now" button for ad-hoc runs.
+- **Reusable confirm-delete modal** — `(app)/_components/ConfirmDeleteForm.tsx`. Replaces `window.confirm` + bare submit forms across cron jobs, function env vars, function "Danger zone", storage bucket / object, and end-user deletes. Each callsite has a tailored message about the side effects.
+- **Cron schedule help** — small `?` icon next to the Schedule field in the cron-job modal expands an inline reference (field layout, operators, examples, UTC note).
+- **Edge function trigger metadata** — every invocation (HTTP or cron-driven) writes one `function.invoke` audit row via a shared `auditInvocation` helper. New **Trigger** column on the invocations page shows `HTTP` or `cron: <job-name>`.
+- **Server-side edge function syntax check** — `validateFunctionCode()` runs the same `new AsyncFunction(...)` compile step on save. Bad code is rejected with the SyntaxError, not silently stored.
+- **PgBouncer service** — transaction-pool multiplexer in front of Postgres. PostgREST and the dashboard's general queries now route through `pgbouncer:6432`; realtime keeps a direct connection to Postgres for `LISTEN`. Image built from `pgbouncer/Dockerfile` (Alpine + the `pgbouncer` package); config generated from env vars at container start. Defaults: `pool_mode = transaction`, `default_pool_size = 30`, `max_client_conn = 1000`.
+- **Realtime connection pool** — new `realtimePool()` in `lib/db.ts` bypasses PgBouncer (max 50, no statement timeout) so SSE `LISTEN` connections survive.
+- **Edge function compile cache** — `getCompiled(fn)` keyed by `name + updated_at`. Repeat invocations skip the per-call `new AsyncFunction(...)` parse; edits bust the cache automatically via `updated_at = now()`.
+
+### Changed
+
+- **Connection pool sizes** — dashboard `pg.Pool max`: 10 → 30; `PGRST_DB_POOL`: 10 → 30.
+- **Postgres `max_connections`** — 100 → 150 via the postgres service `command:` override. Postgres container recreates to pick this up.
+- **PostgREST tuning for transaction pooling** — `PGRST_DB_PREPARED_STATEMENTS=false` (server-side prepared statements don't survive transaction pooling), `PGRST_DB_CHANNEL_ENABLED=false` (schema-cache reload via `LISTEN pgrst` doesn't either; restart PostgREST after DDL changes).
+- **Password generation guidance in `README.md`** — `openssl rand -hex 24` instead of `openssl rand -base64 24`. Base64 can include `/` and `+`, both of which break URL-form Postgres connection strings.
+
+### Database
+
+- Migrations **0012** (`audit_retention_days = 30` seeded into `_dashboard.settings`), **0013** (`GRANT pg_read_all_stats TO dashboard_admin`, so the Home DB-health card can see all sessions), **0014** (`verify_jwt boolean DEFAULT true` on `_dashboard.functions`), and **0015** (`ALTER ROLE … SET statement_timeout = '30s'` for `dashboard_admin` and `authenticator`, since PgBouncer drops the client-side startup param). Applied in order via the existing major-upgrade flow.
+- `postgres/init/03_audit_log.sql` and `02_roles.sql` mirror these for fresh installs.
+
+### Security
+
+- Edge function endpoints are no longer open by default. Existing functions retain whatever behaviour their code already implemented; the new `verify_jwt` toggle is on by default, so a fresh function won't accept anonymous calls without an admin explicitly opting it out.
+- `PGRST_JWT_SECRET` is now passed to the dashboard container (latent bug — `/auth/v1/signin` and `/realtime` were both reading it via `process.env` but `docker-compose.yml`'s dashboard service was never forwarding it from `.env`).
+- `pg_read_all_stats` is a built-in read-only stats privilege; it does not grant access to any data, only to `pg_stat_*` views.
+- The audit chain verifier now seeds `expectedPrev` from `audit_chain_anchor` so retention pruning cannot silently truncate undetected — the anchor must match the oldest surviving row's `prev_hash`.
+
+### Breaking
+
+- **Edge functions now require a JWT by default.** All functions created before this release get `verify_jwt = true` from the migration's column default, so existing public endpoints will start returning `401 missing_token`. To restore the previous behaviour for a specific function, untick "Verify JWT" on its Overview tab. Clients that should keep working without changes should switch to sending the anon key (visible at `/admin/api-keys`) in the `apikey:` header.
+- The new `pgbouncer` service means `scripts/deploy.sh` is **not** enough on existing servers — it runs `--no-deps`, which won't create new services or recreate `postgrest` / `postgres` with the new connection-string and command-line settings. First upgrade requires a full `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d`.
+- Recreating `postgres` triggers a few seconds of downtime. The `postgres-data` volume is preserved, so no data loss.
+- After upgrade, **schema changes (new tables, columns) require `docker compose restart postgrest`** to refresh PostgREST's schema cache — auto-reload via `LISTEN` is disabled to be compatible with PgBouncer transaction mode.
+- Any pre-existing `.env` with a `/` in `AUTHENTICATOR_PASSWORD` (older `openssl rand -base64 24` output) must be rotated. `ALTER ROLE authenticator WITH PASSWORD '<new>';` and update `.env`, then `docker compose up -d --force-recreate pgbouncer postgrest`.
+
 ## [1.0.0] - 2026-05-21
 
 Dashboard milestone. Operator console now covers tables, SQL, storage, audit, end-user auth, realtime, edge functions, and cron — bringing the platform to feature parity with the core Supabase Studio surface.

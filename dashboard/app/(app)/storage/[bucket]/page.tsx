@@ -3,6 +3,7 @@ import { minio } from "@/lib/minio";
 import { getSession } from "@/lib/session";
 import { getBucketPolicy } from "@/lib/storage";
 import { Card } from "../../_components/Card";
+import { ConfirmDeleteForm } from "../../_components/ConfirmDeleteForm";
 import { deleteBucket, uploadObject } from "../actions";
 import { ObjectList } from "./_components/ObjectList";
 import { SettingsModal } from "./_components/SettingsModal";
@@ -108,15 +109,22 @@ export default async function BucketPage({
         <div className="flex gap-2">
           {isAdmin && <SettingsModal policy={policy} />}
           {isAdmin && objects.length === 0 && (
-            <form action={deleteBucket}>
+            <ConfirmDeleteForm
+              action={deleteBucket}
+              triggerLabel="Delete bucket"
+              triggerClassName="rounded border border-red-900/50 px-3 py-1 text-sm text-red-300 hover:bg-red-950/40"
+              title="Delete bucket?"
+              confirmLabel="Delete bucket"
+              message={
+                <>
+                  Delete the empty bucket{" "}
+                  <span className="font-mono text-neutral-100">{bucket}</span>?
+                  Its policy is removed too. This cannot be undone.
+                </>
+              }
+            >
               <input type="hidden" name="name" value={bucket} />
-              <button
-                type="submit"
-                className="rounded border border-red-900/50 px-3 py-1 text-sm text-red-300 hover:bg-red-950/40"
-              >
-                Delete bucket
-              </button>
-            </form>
+            </ConfirmDeleteForm>
           )}
         </div>
       </div>

@@ -19,6 +19,7 @@ CREATE ROLE service_role NOLOGIN NOINHERIT BYPASSRLS;
 CREATE ROLE authenticator LOGIN NOINHERIT PASSWORD :'authenticator_pw';
 GRANT anon TO authenticator;
 GRANT service_role TO authenticator;
+ALTER ROLE authenticator SET statement_timeout = '30s';
 
 -- dashboard_admin: the dashboard's connection. Broad privileges within this DB.
 -- BYPASSRLS so the management UI sees and edits every row regardless of the
@@ -27,6 +28,16 @@ GRANT service_role TO authenticator;
 -- via PostgREST.
 CREATE ROLE dashboard_admin LOGIN BYPASSRLS PASSWORD :'dashboard_admin_pw';
 GRANT ALL ON DATABASE postgres TO dashboard_admin;
+
+-- pg_read_all_stats lets the Home page's DB-health card see connections and
+-- stats from every role (PostgREST's authenticator, postgres, etc.), not
+-- just dashboard_admin's own sessions. Read-only stats access; no data access.
+GRANT pg_read_all_stats TO dashboard_admin;
+
+-- Server-side statement timeout. We can't rely on client-side
+-- statement_timeout passed in the startup packet because PgBouncer drops
+-- those (see ignore_startup_parameters). Enforced on the role instead.
+ALTER ROLE dashboard_admin SET statement_timeout = '30s';
 
 -- dashboard_admin needs full access to public so the dashboard's table browser,
 -- SQL editor, etc. can read/modify any user data.

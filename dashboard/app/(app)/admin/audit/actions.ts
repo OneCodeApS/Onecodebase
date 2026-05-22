@@ -3,7 +3,8 @@
 import { headers } from "next/headers";
 import { pool } from "@/lib/db";
 import { getSession } from "@/lib/session";
-import { audit, chainHash, type ChainBody } from "@/lib/audit";
+import { audit, chainHash, CHAIN_ANCHOR_KEY, type ChainBody } from "@/lib/audit";
+import { getSetting } from "@/lib/settings";
 
 export type VerifyResult =
   | { ok: true; verified: number; durationMs: number }
@@ -61,7 +62,11 @@ export async function verifyChain(): Promise<VerifyResult> {
        ORDER BY id ASC`,
   );
 
-  let expectedPrev: string | null = null;
+  // If retention has pruned rows, the oldest remaining row's prev_hash
+  // points at a deleted row. The anchor stores that hash so the chain
+  // is verifiable from the retained window onward.
+  const anchor = await getSetting<string>(CHAIN_ANCHOR_KEY);
+  let expectedPrev: string | null = anchor ?? null;
   let verified = 0;
   let result: VerifyResult = { ok: true, verified: 0, durationMs: 0 };
 

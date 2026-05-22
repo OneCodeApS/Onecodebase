@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { pool } from "@/lib/db";
+import { realtimePool } from "@/lib/db";
 import { verifyAccessToken } from "@/lib/auth-jwt";
 import { isRealtimeEnabled, SAFE_IDENT } from "@/lib/realtime";
 
@@ -45,7 +45,9 @@ export async function GET(req: NextRequest) {
 
   const stream = new ReadableStream({
     async start(controller) {
-      const client = await pool().connect();
+      // Uses the dedicated realtime pool that bypasses PgBouncer, since
+      // LISTEN needs a session-pinned connection.
+      const client = await realtimePool().connect();
       let closed = false;
 
       // Postgres notifications arrive on the client's connection. Listening

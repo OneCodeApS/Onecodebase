@@ -22,15 +22,35 @@ This repository is **public**. Security comes from your `.env` secrets and Postg
 
 ## Local dev
 
-You'll need: Docker (with Compose v2), `openssl` for generating secrets, and a browser.
+You'll need: Docker (Docker Desktop on Windows/Mac, or Docker Engine with Compose v2 on Linux), `openssl` for generating secrets, and a browser.
+
+On Windows, the easiest setup is Docker Desktop plus Git for Windows (which ships an `openssl.exe` already on PATH). Make sure Docker Desktop is running — the whale icon in the system tray should say "Docker Desktop is running" — before any `docker compose` command.
+
+All commands below show the Linux/macOS form first, then the Windows PowerShell equivalent where it differs.
 
 ### 1. Configure
 
 ```bash
-cp .env.example .env
+cp .env.example .env                  # Linux / macOS
 ```
 
-Fill in `.env`. For each `*_PASSWORD` use `openssl rand -base64 24`. For `SESSION_SECRET` and `PGRST_JWT_SECRET` use `openssl rand -hex 32`. Leave the `*_HOST` and `CADDY_TLS=internal` lines at their defaults.
+```powershell
+Copy-Item .env.example .env           # Windows PowerShell
+```
+
+Open `.env` in an editor and fill in every blank. Generate values with:
+
+```bash
+openssl rand -hex 32       # SESSION_SECRET, PGRST_JWT_SECRET
+openssl rand -hex 24       # each *_PASSWORD and MINIO_ROOT_PASSWORD
+openssl rand -hex 8        # MINIO_ROOT_USER
+```
+
+Use hex (not base64) for passwords that end up in Postgres connection strings — `/` and `+` from base64 can break URL parsing of the connection string.
+
+These commands work identically in PowerShell once Git for Windows is installed. Leave the `*_HOST`, `*_PUBLIC_URL`, and `CADDY_TLS=internal` lines at their defaults — they're already set up for `*.localhost`. Leave `GHCR_OWNER` blank; it's only used by the production overlay.
+
+No separate `.env` is needed inside `dashboard/`. The dashboard container reads its config from the `environment:` block in `docker-compose.yml`, which pulls values from the root `.env`.
 
 ### 2. Bring the stack up
 
@@ -38,7 +58,9 @@ Fill in `.env`. For each `*_PASSWORD` use `openssl rand -base64 24`. For `SESSIO
 docker compose up -d --build
 ```
 
-First boot runs the SQL init scripts (extensions, roles, audit table, sample `todos` table with RLS). Subsequent boots reuse the volume.
+First boot runs the SQL init scripts (extensions, roles, audit table, sample `todos` table with RLS) and takes 30–60 seconds. Subsequent boots reuse the volume. Check progress with `docker compose ps` — all five services should report healthy.
+
+> Don't pass `-f docker-compose.prod.yml` for local dev. That overlay is server-only: it expects `GHCR_OWNER` and pulls a prebuilt image instead of building locally.
 
 ### 3. Create the admin user
 
@@ -60,7 +82,9 @@ If that doesn't work on your OS, copy out the root cert and import it manually:
 
 ```bash
 docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt ./caddy-root.crt
-# then trust caddy-root.crt in your OS keychain
+# Linux / macOS: trust caddy-root.crt in your OS keychain
+# Windows: double-click the .crt and install into "Trusted Root Certification Authorities",
+#          or run `certmgr.msc` → Trusted Root → Import.
 ```
 
 ### 5. Use it
@@ -72,8 +96,67 @@ docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt ./caddy-root.
 Direct DB access from the host (for psql, dbeaver, etc):
 
 ```bash
-psql "postgres://postgres:$POSTGRES_PASSWORD@127.0.0.1:5432/postgres"
+psql "postgres://postgres:$POSTGRES_PASSWORD@127.0.0.1:5432/postgres"           # Linux / macOS
 ```
+
+```powershell
+psql "postgres://postgres:$env:POSTGRES_PASSWORD@127.0.0.1:5432/postgres"       # Windows PowerShell
+```
+
+### Running the dashboard outside Docker (hot reload)
+
+Editing dashboard code and rebuilding the container on every save is slow. For tighter feedback, run Postgres / MinIO / PostgREST / Caddy in Docker and run the Next.js dev server directly on your host.
+
+**1. Make sure the Docker stack is up** (step 2 above). Postgres is exposed on `127.0.0.1:5432` and MinIO on `127.0.0.1:9000` — see the `ports:` blocks in `docker-compose.yml`. That loopback exposure is what makes this mode work.
+
+**2. Create `dashboard/.env.local`.** Next.js doesn't read the root `.env`; it reads `dashboard/.env.local`. Mirror the secrets from the root `.env` but point hostnames at `127.0.0.1`:
+
+```bash
+# dashboard/.env.local — local dev only, do not commit (.env.* is gitignored)
+
+# Note: URL-encode reserved chars in the password (e.g. `+` → `%2B`).
+DATABASE_URL=postgres://dashboard_admin:<DASHBOARD_ADMIN_PASSWORD>@127.0.0.1:5432/postgres
+
+SESSION_SECRET=<same as root .env>
+PGRST_JWT_SECRET=<same as root .env>
+
+MINIO_ENDPOINT=127.0.0.1
+MINIO_PORT=9000
+MINIO_USE_SSL=false
+MINIO_ACCESS_KEY=<MINIO_ROOT_USER from root .env>
+MINIO_SECRET_KEY=<MINIO_ROOT_PASSWORD from root .env>
+MINIO_PUBLIC_URL=http://127.0.0.1:9000
+
+DASHBOARD_PUBLIC_URL=http://localhost:3000
+AUDIT_LOG_DIR=./audit-logs
+```
+
+`instrumentation.ts` boots the cron runner at startup, which opens a DB pool immediately — so the dev server will fail to start unless `DATABASE_URL` resolves and Postgres is reachable.
+
+**3. Run the dev server:**
+
+```bash
+cd dashboard
+npm install
+npm run dev
+```
+
+Open <http://localhost:3000> and sign in with the admin user you created in step 3 of the main setup. Code changes hot-reload; database, storage, and the REST API still come from the Docker stack.
+
+> The dashboard container in Docker doesn't publish port 3000 on the host, so there's no conflict with the dev server. You can leave the dockerized dashboard running — it's just unused while you develop against the dev server on port 3000.
+
+### Stop, restart, reset
+
+```bash
+docker compose ps              # show service status
+docker compose logs -f         # tail logs (Ctrl+C to stop tailing)
+docker compose stop            # stop containers, keep data
+docker compose start           # start them again
+docker compose down            # stop and remove containers, keep volumes
+docker compose down -v         # stop, remove containers AND wipe postgres + minio data
+```
+
+Use `down -v` to start over from a clean slate — you'll re-run the init scripts and need to recreate the admin user on next boot.
 
 ## Install on a Linux server
 
@@ -146,8 +229,10 @@ Generate strong secrets:
 
 ```bash
 openssl rand -hex 32       # use this for SESSION_SECRET and PGRST_JWT_SECRET
-openssl rand -base64 24    # use this for each *_PASSWORD value (run once per password)
+openssl rand -hex 24       # use this for each *_PASSWORD value (run once per password)
 ```
+
+(Hex, not base64 — `/` and `+` from base64 break the URL form of Postgres connection strings.)
 
 Open `.env` in an editor (`nano .env`) and fill in every blank. Set these to your real values:
 

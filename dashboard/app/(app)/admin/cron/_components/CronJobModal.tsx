@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { saveCronJob } from "../actions";
 
 export function CronJobModal({
@@ -19,6 +19,7 @@ export function CronJobModal({
 }) {
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const editing = !!initial;
+  const [showHelp, setShowHelp] = useState(false);
 
   function handleBackdropClick(e: React.MouseEvent<HTMLDialogElement>) {
     if (e.target === dialogRef.current) dialogRef.current?.close();
@@ -70,12 +71,24 @@ export function CronJobModal({
           </div>
 
           <div>
-            <label
-              htmlFor={`cron-schedule-${initial?.name ?? "new"}`}
-              className="block text-xs uppercase tracking-wider text-neutral-500"
-            >
-              Schedule
-            </label>
+            <div className="flex items-center gap-2">
+              <label
+                htmlFor={`cron-schedule-${initial?.name ?? "new"}`}
+                className="block text-xs uppercase tracking-wider text-neutral-500"
+              >
+                Schedule
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowHelp((v) => !v)}
+                aria-expanded={showHelp}
+                aria-label="Cron format help"
+                title="Cron format help"
+                className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-neutral-600 text-[10px] leading-none text-neutral-400 hover:border-neutral-400 hover:text-neutral-200"
+              >
+                ?
+              </button>
+            </div>
             <input
               id={`cron-schedule-${initial?.name ?? "new"}`}
               type="text"
@@ -91,6 +104,53 @@ export function CronJobModal({
               <span className="font-mono">*/5 * * * *</span> (every 5 min),{" "}
               <span className="font-mono">0 0 * * *</span> (daily at midnight UTC).
             </p>
+            {showHelp && (
+              <div className="mt-2 rounded border border-neutral-800 bg-neutral-950/60 px-3 py-2 text-xs text-neutral-300">
+                <p className="mb-2 font-medium text-neutral-200">Cron format</p>
+                <pre className="mb-2 whitespace-pre font-mono text-[11px] leading-snug text-neutral-400">
+{`┌──── minute        (0-59)
+│ ┌── hour          (0-23)
+│ │ ┌── day of month (1-31)
+│ │ │ ┌── month       (1-12)
+│ │ │ │ ┌── day of week (0-7, both 0 and 7 = Sunday)
+│ │ │ │ │
+* * * * *`}
+                </pre>
+                <p className="mb-1 font-medium text-neutral-200">Operators</p>
+                <ul className="mb-2 list-disc space-y-0.5 pl-5 text-neutral-400">
+                  <li>
+                    <span className="font-mono text-neutral-200">*</span> — any value
+                  </li>
+                  <li>
+                    <span className="font-mono text-neutral-200">a,b,c</span> — list of values
+                  </li>
+                  <li>
+                    <span className="font-mono text-neutral-200">a-b</span> — range
+                  </li>
+                  <li>
+                    <span className="font-mono text-neutral-200">*/n</span> — every <em>n</em> units
+                  </li>
+                </ul>
+                <p className="mb-1 font-medium text-neutral-200">More examples</p>
+                <ul className="list-disc space-y-0.5 pl-5 text-neutral-400">
+                  <li>
+                    <span className="font-mono text-neutral-200">30 2 * * *</span> — daily at 02:30 UTC
+                  </li>
+                  <li>
+                    <span className="font-mono text-neutral-200">0 9 * * 1-5</span> — weekdays at 09:00 UTC
+                  </li>
+                  <li>
+                    <span className="font-mono text-neutral-200">0 0 1 * *</span> — first of each month
+                  </li>
+                  <li>
+                    <span className="font-mono text-neutral-200">*/10 * * * *</span> — every 10 minutes
+                  </li>
+                </ul>
+                <p className="mt-2 text-neutral-500">
+                  All times are evaluated in the dashboard container&apos;s timezone (UTC by default).
+                </p>
+              </div>
+            )}
           </div>
 
           <div>
