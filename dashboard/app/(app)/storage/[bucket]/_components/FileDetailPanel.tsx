@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { ConfirmDeleteForm } from "../../../_components/ConfirmDeleteForm";
 import { deleteObject, getShareLink } from "../../actions";
 
 export type FileEntry = {
@@ -260,16 +261,23 @@ export function FileDetailPanel({
             Download
           </a>
           {canWrite && (
-            <form action={deleteObject} className="ml-auto">
+            <ConfirmDeleteForm
+              action={deleteObject}
+              triggerLabel="Delete"
+              triggerClassName="ml-auto rounded border border-red-900/50 px-3 py-1.5 text-xs text-red-300 hover:bg-red-950/40"
+              title="Delete file?"
+              message={
+                <>
+                  Permanently delete{" "}
+                  <span className="font-mono text-neutral-100">{object.name}</span>{" "}
+                  from <span className="font-mono text-neutral-100">{bucket}</span>?
+                  This cannot be undone.
+                </>
+              }
+            >
               <input type="hidden" name="bucket" value={bucket} />
               <input type="hidden" name="name" value={object.name} />
-              <button
-                type="submit"
-                className="rounded border border-red-900/50 px-3 py-1.5 text-xs text-red-300 hover:bg-red-950/40"
-              >
-                Delete
-              </button>
-            </form>
+            </ConfirmDeleteForm>
           )}
         </div>
       </div>

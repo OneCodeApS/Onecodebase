@@ -1,4 +1,5 @@
 import { Card } from "../../_components/Card";
+import { ConfirmDeleteForm } from "../../_components/ConfirmDeleteForm";
 import { listCronJobs } from "@/lib/cron";
 import { listFunctions } from "@/lib/functions";
 import { removeCronJob } from "./actions";
@@ -137,15 +138,21 @@ export default async function CronPage({
                           enabled: j.enabled,
                         }}
                       />
-                      <form action={removeCronJob} className="inline">
+                      <ConfirmDeleteForm
+                        action={removeCronJob}
+                        triggerLabel="Delete"
+                        triggerClassName="text-xs text-red-400 underline hover:text-red-200"
+                        title="Delete cron job?"
+                        message={
+                          <>
+                            Delete cron job{" "}
+                            <span className="font-mono text-neutral-100">{j.name}</span>?
+                            The schedule stops immediately. The function itself is not affected.
+                          </>
+                        }
+                      >
                         <input type="hidden" name="name" value={j.name} />
-                        <button
-                          type="submit"
-                          className="text-xs text-red-400 underline hover:text-red-200"
-                        >
-                          Delete
-                        </button>
-                      </form>
+                      </ConfirmDeleteForm>
                     </div>
                   </td>
                 </tr>

@@ -1,4 +1,5 @@
 import { Card } from "../../../_components/Card";
+import { ConfirmDeleteForm } from "../../../_components/ConfirmDeleteForm";
 import { listEnvVars } from "@/lib/function-env";
 import { removeEnvVar } from "./actions";
 import { EnvVarModal } from "./_components/EnvVarModal";
@@ -112,15 +113,22 @@ export default async function EnvPage({
                           description: v.description,
                         }}
                       />
-                      <form action={removeEnvVar} className="inline">
+                      <ConfirmDeleteForm
+                        action={removeEnvVar}
+                        triggerLabel="Delete"
+                        triggerClassName="text-xs text-red-400 underline hover:text-red-200"
+                        title="Delete environment variable?"
+                        message={
+                          <>
+                            Delete <span className="font-mono text-neutral-100">{v.key}</span>?
+                            Any edge function reading{" "}
+                            <span className="font-mono text-neutral-100">ctx.env.{v.key}</span>{" "}
+                            will see <span className="font-mono">undefined</span> on its next invocation.
+                          </>
+                        }
+                      >
                         <input type="hidden" name="key" value={v.key} />
-                        <button
-                          type="submit"
-                          className="text-xs text-red-400 underline hover:text-red-200"
-                        >
-                          Delete
-                        </button>
-                      </form>
+                      </ConfirmDeleteForm>
                     </div>
                   </td>
                 </tr>

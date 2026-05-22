@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { Card } from "../../../../_components/Card";
+import { ConfirmDeleteForm } from "../../../../_components/ConfirmDeleteForm";
 import { FUNCTION_NAME, getFunction } from "@/lib/functions";
 import { removeFunction, saveOverview } from "../../actions";
 
@@ -126,15 +127,25 @@ export default async function OverviewPage({
         <p className="mt-1 text-sm text-neutral-500">
           Deletes the function record. Doesn't affect anything else in the DB.
         </p>
-        <form action={removeFunction} className="mt-4">
-          <input type="hidden" name="name" value={fn.name} />
-          <button
-            type="submit"
-            className="rounded border border-red-900/50 px-3 py-1.5 text-sm text-red-300 hover:bg-red-950/40"
+        <div className="mt-4">
+          <ConfirmDeleteForm
+            action={removeFunction}
+            triggerLabel="Delete function"
+            triggerClassName="rounded border border-red-900/50 px-3 py-1.5 text-sm text-red-300 hover:bg-red-950/40"
+            title="Delete function?"
+            confirmLabel="Delete function"
+            message={
+              <>
+                Permanently delete{" "}
+                <span className="font-mono text-neutral-100">{fn.name}</span>?
+                Any cron jobs that invoke it will start failing on their next run.
+                This cannot be undone.
+              </>
+            }
           >
-            Delete function
-          </button>
-        </form>
+            <input type="hidden" name="name" value={fn.name} />
+          </ConfirmDeleteForm>
+        </div>
       </Card>
     </div>
   );
