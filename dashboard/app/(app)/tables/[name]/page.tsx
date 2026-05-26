@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { pool } from "@/lib/db";
 import { Card } from "../../_components/Card";
+import { RefreshButton } from "../../_components/RefreshButton";
 
 const PAGE_SIZE = 50;
 
@@ -124,13 +125,18 @@ export default async function TableRowsPage({
 
   return (
     <main className="px-6 py-10">
-      <h1 className="text-2xl font-semibold">
-        <span className="font-mono">{schema}.{name}</span>
-      </h1>
-      <p className="mt-1 text-sm text-neutral-500">
-        {total.toLocaleString()} {total === 1 ? "row" : "rows"} ·{" "}
-        {columns.length} {columns.length === 1 ? "column" : "columns"}
-      </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">
+            <span className="font-mono">{schema}.{name}</span>
+          </h1>
+          <p className="mt-1 text-sm text-neutral-500">
+            {total.toLocaleString()} {total === 1 ? "row" : "rows"} ·{" "}
+            {columns.length} {columns.length === 1 ? "column" : "columns"}
+          </p>
+        </div>
+        <RefreshButton />
+      </div>
 
       <Card className="mt-6 overflow-x-auto">
         <table className="w-full border-collapse text-sm">
