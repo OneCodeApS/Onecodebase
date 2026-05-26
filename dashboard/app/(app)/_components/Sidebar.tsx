@@ -24,6 +24,8 @@ const GROUPS: NavGroup[] = [
     items: [
       { href: "/tables", label: "Tables", match: "/tables" },
       { href: "/sql", label: "SQL Editor", match: "/sql" },
+      { href: "/admin/policies", label: "RLS policies", match: "/admin/policies", adminOnly: true },
+      { href: "/admin/db-functions", label: "DB functions", match: "/admin/db-functions", adminOnly: true },
       { href: "/admin/realtime", label: "Realtime", match: "/admin/realtime", adminOnly: true },
     ],
   },
