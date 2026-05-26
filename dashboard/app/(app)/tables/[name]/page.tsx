@@ -57,6 +57,27 @@ function renderCell(v: unknown): string {
   return String(v);
 }
 
+// Tables under SYSTEM_SCHEMAS have invariants the row viewer can't safely
+// preserve (audit hash chain, AES-GCM ciphertext, Argon2id password hashes,
+// scheduler re-registration). The viewer marks them read-only and points at
+// the hand-built admin page when there is one. SQL editor is still the
+// unrestricted escape hatch.
+const SYSTEM_SCHEMAS = new Set(["_dashboard", "auth"]);
+
+// Schema-qualified table → admin page that knows how to mutate it safely.
+// Missing entries fall back to a generic "managed by the admin UI" hint.
+const ADMIN_PAGE: Record<string, { href: string; label: string }> = {
+  "_dashboard.users": { href: "/admin/users", label: "Dashboard users" },
+  "_dashboard.audit_log": { href: "/admin/audit", label: "Audit log" },
+  "_dashboard.functions": { href: "/admin/functions", label: "Edge functions" },
+  "_dashboard.function_env": { href: "/admin/functions/env", label: "Function env vars" },
+  "_dashboard.cron_jobs": { href: "/admin/cron", label: "Cron jobs" },
+  "_dashboard.settings": { href: "/admin/settings", label: "Audit settings" },
+  "_dashboard.bucket_policies": { href: "/storage", label: "Storage buckets" },
+  "auth.users": { href: "/admin/end-users", label: "End users" },
+  "auth.providers": { href: "/admin/auth-providers", label: "Auth providers" },
+};
+
 // Columns containing secrets or other values we never want to render plainly
 // in the table browser. Browsing a table that contains one of these will show
 // a masked placeholder instead. Defense in depth — admins can still query the
@@ -123,6 +144,9 @@ export default async function TableRowsPage({
   const from = total === 0 ? 0 : offset + 1;
   const to = Math.min(offset + rows.length, total);
 
+  const isSystemSchema = SYSTEM_SCHEMAS.has(schema);
+  const adminPage = ADMIN_PAGE[`${schema}.${name}`];
+
   return (
     <main className="px-6 py-10">
       <div className="flex items-start justify-between gap-4">
@@ -137,6 +161,29 @@ export default async function TableRowsPage({
         </div>
         <RefreshButton />
       </div>
+
+      {isSystemSchema && (
+        <div className="mt-4 rounded border border-amber-900/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-200">
+          <span className="font-medium">Read-only.</span>{" "}
+          This is a system table — direct edits would bypass invariants
+          (audit hash chain, encrypted env vars, password hashing, scheduler
+          state).{" "}
+          {adminPage ? (
+            <>
+              Use{" "}
+              <Link
+                href={adminPage.href}
+                className="underline decoration-amber-500/50 underline-offset-2 hover:decoration-amber-300"
+              >
+                {adminPage.label}
+              </Link>{" "}
+              to modify rows safely.
+            </>
+          ) : (
+            <>Mutations should go through the SQL editor with care, or the corresponding admin page.</>
+          )}
+        </div>
+      )}
 
       <Card className="mt-6 overflow-x-auto">
         <table className="w-full border-collapse text-sm">

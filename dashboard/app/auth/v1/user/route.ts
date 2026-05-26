@@ -1,8 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { verifyAccessToken } from "@/lib/auth-jwt";
 import { pool } from "@/lib/db";
+import { corsPreflight, withCors } from "@/lib/cors";
 
-export async function GET(req: NextRequest) {
+const METHODS = ["GET"] as const;
+
+async function handler(req: NextRequest) {
   const auth = req.headers.get("authorization") ?? "";
   const m = auth.match(/^Bearer\s+(.+)$/i);
   if (!m) {
@@ -46,3 +49,6 @@ export async function GET(req: NextRequest) {
     metadata: user.raw_user_metadata,
   });
 }
+
+export const GET = withCors(handler, { methods: METHODS });
+export const OPTIONS = corsPreflight({ methods: METHODS });

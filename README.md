@@ -90,8 +90,8 @@ docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt ./caddy-root.
 ### 5. Use it
 
 - **Dashboard:** <https://dashboard.localhost> → sign in with the credentials from step 3.
-- **API:** <https://api.localhost/todos> → returns the seeded rows as JSON. Try `curl https://api.localhost/todos`.
-- **Files:** <https://files.localhost> → MinIO S3 endpoint. The web console (`:9001`) is intentionally not exposed; the dashboard will be the only UI for buckets.
+- **API:** <https://api.localhost/rest/v1/todos> → returns the seeded rows as JSON. Try `curl https://api.localhost/rest/v1/todos`. The API host also exposes `/rpc/v1/<fn>` (PostgREST RPC), `/auth/v1/*` (end-user auth), `/realtime` (SSE), and `/functions/v1/<name>` (edge functions).
+- **Storage:** <https://api.localhost/storage/v1> → authorization layer. Clients ask for a signed URL here; the dashboard 302s to a 60-second MinIO presigned URL on `files.localhost` for the actual bytes. The data-plane host (`files.localhost`) is internal — don't construct URLs against it directly.
 
 Direct DB access from the host (for psql, dbeaver, etc):
 
@@ -282,7 +282,7 @@ Quick sanity checks:
 docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
 
 # Sample API returns the seeded rows.
-curl https://api.example.com/todos
+curl https://api.example.com/rest/v1/todos
 ```
 
 Install complete.

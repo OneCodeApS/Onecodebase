@@ -1,8 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { signAccessToken } from "@/lib/auth-jwt";
 import { rotateSession } from "@/lib/auth-users";
+import { corsPreflight, withCors } from "@/lib/cors";
 
-export async function POST(req: NextRequest) {
+const METHODS = ["POST"] as const;
+
+async function handler(req: NextRequest) {
   let body: { refresh_token?: string };
   try {
     body = await req.json();
@@ -35,3 +38,6 @@ export async function POST(req: NextRequest) {
     refresh_expires_at: rotated.expiresAt.toISOString(),
   });
 }
+
+export const POST = withCors(handler, { methods: METHODS });
+export const OPTIONS = corsPreflight({ methods: METHODS });

@@ -30,6 +30,13 @@ function isFunctionsApi(pathname: string): boolean {
   return pathname.startsWith("/functions/v1/");
 }
 
+// Storage proxy — public API on api.*/storage/v1/*. Each route enforces its
+// own auth (HMAC token, JWT, or bucket-visibility check), so the dashboard
+// session is irrelevant here.
+function isStorageApi(pathname: string): boolean {
+  return pathname.startsWith("/storage/v1/");
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
@@ -37,7 +44,8 @@ export async function middleware(req: NextRequest) {
     PUBLIC_PATHS.has(pathname) ||
     isPublicAuthApi(pathname) ||
     isRealtimeApi(pathname) ||
-    isFunctionsApi(pathname)
+    isFunctionsApi(pathname) ||
+    isStorageApi(pathname)
   ) {
     return NextResponse.next();
   }

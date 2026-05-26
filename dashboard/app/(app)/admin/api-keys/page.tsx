@@ -89,6 +89,58 @@ export default async function ApiKeysPage() {
       </Card>
 
       <Card padded className="mt-4">
+        <h2 className="text-lg font-medium">Endpoints</h2>
+        <p className="mt-1 text-sm text-neutral-500">
+          All public APIs live under{" "}
+          <span className="font-mono text-neutral-300">api.&lt;your-host&gt;</span>.
+          The dashboard host serves only the operator UI.
+        </p>
+        <table className="mt-3 w-full text-left text-xs">
+          <thead className="text-neutral-500">
+            <tr>
+              <th className="py-1 pr-4 font-normal">Surface</th>
+              <th className="py-1 font-normal">Path</th>
+            </tr>
+          </thead>
+          <tbody className="font-mono text-neutral-300">
+            <tr>
+              <td className="py-1 pr-4 text-neutral-400">Tables (PostgREST)</td>
+              <td className="py-1">/rest/v1/&lt;table&gt;</td>
+            </tr>
+            <tr>
+              <td className="py-1 pr-4 text-neutral-400">DB functions (RPC)</td>
+              <td className="py-1">/rpc/v1/&lt;fn&gt;</td>
+            </tr>
+            <tr>
+              <td className="py-1 pr-4 text-neutral-400">End-user auth</td>
+              <td className="py-1">/auth/v1/&lt;signin|signup|refresh|signout|user&gt;</td>
+            </tr>
+            <tr>
+              <td className="py-1 pr-4 text-neutral-400">Realtime</td>
+              <td className="py-1">/realtime?schema=&lt;s&gt;&amp;table=&lt;t&gt;</td>
+            </tr>
+            <tr>
+              <td className="py-1 pr-4 text-neutral-400">Edge functions</td>
+              <td className="py-1">/functions/v1/&lt;name&gt;</td>
+            </tr>
+            <tr>
+              <td className="py-1 pr-4 text-neutral-400">Storage proxy</td>
+              <td className="py-1">/storage/v1/object/&lt;public|sign|upload&gt;/…</td>
+            </tr>
+          </tbody>
+        </table>
+        <p className="mt-3 text-xs text-neutral-500">
+          Storage clients hit{" "}
+          <span className="font-mono text-neutral-300">api.*/storage/v1</span>{" "}
+          for authorization; the proxy then 302s to a 60-second MinIO
+          presigned URL on{" "}
+          <span className="font-mono text-neutral-300">files.&lt;your-host&gt;</span>{" "}
+          for the actual byte stream. The data-plane hostname is internal —
+          don&apos;t embed it in clients.
+        </p>
+      </Card>
+
+      <Card padded className="mt-4">
         <h2 className="text-lg font-medium">Quick reference</h2>
         <p className="mt-1 text-sm text-neutral-500">
           Calling an edge function with the anon key:

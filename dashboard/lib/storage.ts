@@ -65,18 +65,3 @@ export function mimeAllowed(mime: string, allowed: string[] | null): boolean {
   });
 }
 
-// Generates the AWS-style anonymous-read bucket policy MinIO accepts to
-// expose every object in a bucket publicly via GET.
-export function publicReadPolicy(bucket: string): string {
-  return JSON.stringify({
-    Version: "2012-10-17",
-    Statement: [
-      {
-        Effect: "Allow",
-        Principal: { AWS: ["*"] },
-        Action: ["s3:GetObject"],
-        Resource: [`arn:aws:s3:::${bucket}/*`],
-      },
-    ],
-  });
-}

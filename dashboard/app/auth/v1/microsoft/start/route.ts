@@ -2,6 +2,9 @@ import crypto from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { microsoftAuthorizeUrl } from "@/lib/auth-oauth-microsoft";
 import { isProviderEnabled } from "@/lib/auth-settings";
+import { corsPreflight, withCors } from "@/lib/cors";
+
+const METHODS = ["GET"] as const;
 
 // Starts the Microsoft OAuth code flow. Optional `?return_to=<absolute-url>`
 // is round-tripped through `state` so the callback can hand control back to
@@ -10,7 +13,7 @@ import { isProviderEnabled } from "@/lib/auth-settings";
 //
 // Usage from a client app:
 //   window.location = 'https://api.example.com/auth/v1/microsoft/start?return_to=https://myapp/cb'
-export async function GET(req: NextRequest) {
+async function handler(req: NextRequest) {
   if (!(await isProviderEnabled("microsoft"))) {
     return NextResponse.json(
       { error: "microsoft_provider_disabled" },
@@ -37,3 +40,6 @@ export async function GET(req: NextRequest) {
   });
   return res;
 }
+
+export const GET = withCors(handler, { methods: METHODS });
+export const OPTIONS = corsPreflight({ methods: METHODS });

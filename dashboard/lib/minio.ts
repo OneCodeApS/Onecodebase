@@ -81,11 +81,3 @@ export const minioPublic: Client = new Proxy({} as Client, {
     return typeof value === "function" ? value.bind(target) : value;
   },
 });
-
-// Returns the public, browser-friendly base URL (e.g. "https://files.example.com")
-// or null if MINIO_PUBLIC_URL isn't configured.
-export function minioPublicBaseUrl(): string | null {
-  const v = process.env.MINIO_PUBLIC_URL;
-  if (!v) return null;
-  return v.replace(/\/+$/, "");
-}

@@ -14,6 +14,9 @@ import {
   type AuthUser,
 } from "@/lib/auth-users";
 import { isProviderEnabled } from "@/lib/auth-settings";
+import { corsPreflight, withCors } from "@/lib/cors";
+
+const METHODS = ["GET"] as const;
 
 // Handles the redirect back from Microsoft. Validates state against the cookie
 // we set in `/start`, exchanges the code for tokens, then either:
@@ -23,7 +26,7 @@ import { isProviderEnabled } from "@/lib/auth-settings";
 // On success, redirects to the original return_to URL with tokens in the
 // query string — apps should immediately read those, store them, and replace
 // the URL (e.g. via history.replaceState) so tokens don't linger in the bar.
-export async function GET(req: NextRequest) {
+async function handler(req: NextRequest) {
   if (!(await isProviderEnabled("microsoft"))) {
     return NextResponse.json(
       { error: "microsoft_provider_disabled" },
@@ -137,3 +140,6 @@ export async function GET(req: NextRequest) {
   res.cookies.delete("auth_ms_nonce");
   return res;
 }
+
+export const GET = withCors(handler, { methods: METHODS });
+export const OPTIONS = corsPreflight({ methods: METHODS });

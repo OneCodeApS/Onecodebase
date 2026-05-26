@@ -37,10 +37,24 @@ Sorted roughly by when it bites, not by effort.
 ## Auth follow-ups (from the verify_jwt rollout)
 
 ### CORS on `/functions/v1/*`
-Edge functions now accept JWTs but don't set CORS headers. Browser apps calling from a different origin (e.g., your client app hosted on `app.example.com` calling `api.example.com/functions/v1/foo`) will hit CORS errors before the JWT ever gets checked.
+Edge functions accept JWTs but don't set CORS headers. The `lib/cors.ts` helper now used by `/auth/v1/*` is ready — function invocation routes just need to be wrapped with `withCors(handler, { methods: ["GET", "POST", ...] })` and export an `OPTIONS = corsPreflight(...)`. Per-function origin overrides (a `cors_origins` column on `_dashboard.functions`) can layer on top later if a single global allowlist isn't enough.
 
-- **Fix:** add `Access-Control-Allow-Origin`, `-Methods`, `-Headers` to the route response, plus an `OPTIONS` preflight handler. Either allow `*` (since the JWT is the actual gate) or make it a per-function setting.
-- **Note:** the dashboard's `apikey` header is non-standard, so `Access-Control-Allow-Headers` must include it explicitly.
+### Storage: resumable uploads (TUS / S3 multipart)
+The first storage-proxy pass shipped with single-PUT presigned URLs — works up to S3's per-object limit but a dropped connection at 80% means starting over. For mobile / flaky-network clients we want one of:
+  - **S3 multipart upload via presigned URLs** — `POST /storage/v1/object/multipart/<bucket>/<key>` returns an `upload_id` plus N presigned part URLs. Client PUTs ~5MB chunks in parallel; failed parts are retried individually. `POST .../complete` tells MinIO to assemble. MinIO supports this natively.
+  - **TUS protocol** — Supabase's chosen path. Server runs `tus-node-server`, client uses `tus-js-client`. Resumable via offset tracking. More protocol surface but cleaner for browser clients.
+Multipart is the smaller delta; TUS is the better client experience. Pick once a real use case lands.
+
+### Storage: per-bucket ACL beyond visibility
+Today the storage proxy only knows "public" vs "private" buckets. Anyone with an authenticated JWT can request a signed URL for any private bucket, and only service_role can DELETE. Need:
+  - A `_dashboard.bucket_acl` table (bucket × role) or RLS-style policies against `_dashboard.storage_objects` (would require us to track objects in Postgres, Supabase-style — large change).
+  - Until then: every JWT is equivalent to every other, so a leaked end-user token grants read of every private bucket.
+
+### Storage: bucket-events audit
+The legacy actions.ts writes audit rows for storage.object.upload/delete/share via server actions in the dashboard. The new /storage/v1 proxy routes don't yet write audit rows — uploads via the upload-URL endpoint and shares via the signed-URL endpoint are currently un-audited at the proxy layer. Either:
+  - Audit at URL-issuance time inside the route handlers (matches what dashboard server actions do today), or
+  - Subscribe to MinIO bucket-notification events (s3:ObjectCreated:Put, s3:ObjectRemoved:Delete) and write audit rows from a small worker.
+First option is faster; second is more accurate (catches uploads via the presigned URL even if the client lies about size/MIME in the issuance call).
 
 ### Per-function role policy
 `verify_jwt` is binary today: any signed JWT works (anon / authenticated / service_role). For most functions an admin probably wants more: "only authenticated users, not anon" or "service_role only".

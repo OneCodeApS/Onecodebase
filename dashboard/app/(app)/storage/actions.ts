@@ -4,17 +4,17 @@ import { Buffer } from "node:buffer";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { minio, minioPublic, minioPublicBaseUrl } from "@/lib/minio";
+import { minio } from "@/lib/minio";
 import {
   getBucketPolicy,
   mimeAllowed,
-  publicReadPolicy,
   setBucketPolicy,
   type BucketPolicy,
   type Visibility,
 } from "@/lib/storage";
 import { getSession } from "@/lib/session";
 import { audit } from "@/lib/audit";
+import { signObjectUrl } from "@/lib/storage-signing";
 
 // S3 bucket name rules: 3-63 chars, lowercase, digits, hyphens. Must begin
 // and end with a letter or digit. We're stricter than S3 (no periods).
@@ -263,13 +263,12 @@ export async function updateBucketPolicy(formData: FormData) {
   let errMsg: string | null = null;
   try {
     await setBucketPolicy(policy, session.userId ?? null);
-    // Mirror visibility to MinIO. Public → anonymous GET allowed.
-    // Private → clear the policy (empty string removes the bucket policy).
-    if (visibility === "public") {
-      await minio.setBucketPolicy(bucket, publicReadPolicy(bucket));
-    } else {
-      await minio.setBucketPolicy(bucket, "");
-    }
+    // No mirror to MinIO any more: every request goes through the
+    // /storage/v1 dashboard proxy, which is the canonical authorization
+    // gate. MinIO stays internally accessible only via dashboard-issued
+    // SigV4 URLs; whether a bucket is "public" is enforced by the proxy's
+    // /storage/v1/object/public/* route checking this row.
+    await minio.setBucketPolicy(bucket, "");
   } catch (e) {
     errMsg = (e as Error).message;
   }
@@ -298,9 +297,12 @@ export async function updateBucketPolicy(formData: FormData) {
   redirect(`/storage/${bucket}?ok=${encodeURIComponent("Policy updated")}`);
 }
 
-// Returns a sharable URL for the object. For public buckets, just the direct
-// MinIO public URL (no expiry). For private buckets, a presigned GET URL with
-// the requested expiry. Audited so leaked links are traceable.
+// Returns a sharable URL for the object. Both visibility modes now go
+// through the /storage/v1 proxy on api.<host>:
+//   - public  → /storage/v1/object/public/<bucket>/<key>  (no token)
+//   - private → /storage/v1/object/sign/<bucket>/<key>?token=…&expires=…
+// Either URL is opaque to the recipient — the dashboard decides per-request
+// whether to 302 to MinIO. Audited so leaked links are traceable.
 export async function getShareLink(
   bucket: string,
   name: string,
@@ -310,16 +312,23 @@ export async function getShareLink(
   const ip = await clientIp();
 
   const policy = await getBucketPolicy(bucket);
-  const publicBase = minioPublicBaseUrl();
+  const apiBaseUrl = (process.env.API_PUBLIC_URL ?? "").replace(/\/+$/, "");
 
   let url: string;
   let expiresAt: string | null = null;
 
-  if (policy.visibility === "public" && publicBase) {
-    url = `${publicBase}/${encodeURIComponent(bucket)}/${encodeURIComponent(name).replace(/%2F/g, "/")}`;
+  if (policy.visibility === "public") {
+    const encodedKey = name.split("/").map(encodeURIComponent).join("/");
+    url = `${apiBaseUrl}/storage/v1/object/public/${encodeURIComponent(bucket)}/${encodedKey}`;
   } else {
-    url = await minioPublic.presignedGetObject(bucket, name, expirySeconds);
-    expiresAt = new Date(Date.now() + expirySeconds * 1000).toISOString();
+    const signed = signObjectUrl({
+      apiBaseUrl,
+      bucket,
+      key: name,
+      expiresInSeconds: expirySeconds,
+    });
+    url = signed.url;
+    expiresAt = signed.expires_at;
   }
 
   await audit({
