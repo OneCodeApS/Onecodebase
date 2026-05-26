@@ -93,7 +93,7 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER must be set}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must be set}
-      MINIO_BROWSER_REDIRECT_URL: ${MINIO_PUBLIC_URL:-http://files.localhost}
+      MINIO_BROWSER_REDIRECT_URL: ${DASHBOARD_PUBLIC_URL:-http://dashboard.localhost}
     volumes:
       - minio-data:/data
     ports:
@@ -131,16 +131,14 @@ services:
       MINIO_USE_SSL: "false"
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-      MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL:-http://files.localhost}
       DASHBOARD_PUBLIC_URL: ${DASHBOARD_PUBLIC_URL:-http://dashboard.localhost}
-      # Used by /storage/v1 to mint signed URLs that point at api.<host>.
+      # Drives the MinIO SDK's endPoint for signing /storage/v1 URLs AND the
+      # OpenAPI server URL surfaced by PostgREST. Always the public api host.
       API_PUBLIC_URL: ${API_PUBLIC_URL:-http://api.localhost}
       # AES-256-GCM key for encrypted edge-function env vars (lib/function-env.ts).
       FUNCTION_ENV_KEY: ${FUNCTION_ENV_KEY:?FUNCTION_ENV_KEY must be set}
       # CORS allowlist for /auth/v1, /functions/v1, /realtime — see lib/cors.ts.
       AUTH_ALLOWED_ORIGINS: ${AUTH_ALLOWED_ORIGINS:-}
-      # HMAC key for /storage/v1 signed URLs — see lib/storage-signing.ts.
-      STORAGE_SIGNING_KEY: ${STORAGE_SIGNING_KEY:?STORAGE_SIGNING_KEY must be set}
       AUDIT_LOG_DIR: /audit
     volumes:
       # Host path for the file-based audit log. The admin chooses the
@@ -164,7 +162,6 @@ services:
     environment:
       API_HOST: ${API_HOST:-api.localhost}
       DASHBOARD_HOST: ${DASHBOARD_HOST:-dashboard.localhost}
-      FILES_HOST: ${FILES_HOST:-files.localhost}
       CADDY_TLS: ${CADDY_TLS:-internal}
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro

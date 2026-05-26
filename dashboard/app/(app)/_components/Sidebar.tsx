@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { logout } from "../logout/actions";
 import type { UserRole } from "@/lib/session";
+import { version as APP_VERSION } from "@/package.json";
 
 type NavItem = {
   href: string;
@@ -69,10 +70,11 @@ export function Sidebar({ email, role }: { email: string; role: UserRole }) {
 
   return (
     <aside className="flex h-screen w-60 shrink-0 flex-col border-r border-neutral-800 bg-neutral-950">
-      <div className="border-b border-neutral-800 px-4 py-4">
+      <div className="flex items-baseline gap-2 border-b border-neutral-800 px-4 py-4">
         <Link href="/" className="text-sm font-semibold text-neutral-100 hover:text-white">
           Onecodebase
         </Link>
+        <span className="font-mono text-[10px] text-neutral-500">v{APP_VERSION}</span>
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2 py-4">

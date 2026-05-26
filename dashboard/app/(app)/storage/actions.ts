@@ -4,17 +4,17 @@ import { Buffer } from "node:buffer";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { minio } from "@/lib/minio";
+import { minio, publicObjectUrl, publicSignedObjectUrl } from "@/lib/minio";
 import {
   getBucketPolicy,
   mimeAllowed,
+  publicReadPolicy,
   setBucketPolicy,
   type BucketPolicy,
   type Visibility,
 } from "@/lib/storage";
 import { getSession } from "@/lib/session";
 import { audit } from "@/lib/audit";
-import { signObjectUrl } from "@/lib/storage-signing";
 
 // S3 bucket name rules: 3-63 chars, lowercase, digits, hyphens. Must begin
 // and end with a letter or digit. We're stricter than S3 (no periods).
@@ -263,12 +263,15 @@ export async function updateBucketPolicy(formData: FormData) {
   let errMsg: string | null = null;
   try {
     await setBucketPolicy(policy, session.userId ?? null);
-    // No mirror to MinIO any more: every request goes through the
-    // /storage/v1 dashboard proxy, which is the canonical authorization
-    // gate. MinIO stays internally accessible only via dashboard-issued
-    // SigV4 URLs; whether a bucket is "public" is enforced by the proxy's
-    // /storage/v1/object/public/* route checking this row.
-    await minio.setBucketPolicy(bucket, "");
+    // Mirror visibility to MinIO. Caddy strips /storage/v1/object before
+    // forwarding, so MinIO sees a plain path-style request and applies its
+    // own bucket ACL. Public buckets get anonymous-read; private buckets
+    // get the policy cleared (only valid SigV4 URLs work).
+    if (visibility === "public") {
+      await minio.setBucketPolicy(bucket, publicReadPolicy(bucket));
+    } else {
+      await minio.setBucketPolicy(bucket, "");
+    }
   } catch (e) {
     errMsg = (e as Error).message;
   }
@@ -297,12 +300,12 @@ export async function updateBucketPolicy(formData: FormData) {
   redirect(`/storage/${bucket}?ok=${encodeURIComponent("Policy updated")}`);
 }
 
-// Returns a sharable URL for the object. Both visibility modes now go
-// through the /storage/v1 proxy on api.<host>:
-//   - public  → /storage/v1/object/public/<bucket>/<key>  (no token)
-//   - private → /storage/v1/object/sign/<bucket>/<key>?token=…&expires=…
-// Either URL is opaque to the recipient — the dashboard decides per-request
-// whether to 302 to MinIO. Audited so leaked links are traceable.
+// Returns a sharable URL for the object. Both routes resolve under
+// api.<host>/storage/v1/object/<bucket>/<key>:
+//   - public  → no query string; MinIO's anonymous-read ACL serves it
+//   - private → SigV4-signed; valid for `expirySeconds`
+// Caddy strips /storage/v1/object before forwarding, so the path MinIO
+// verifies the signature against matches what the SDK signed.
 export async function getShareLink(
   bucket: string,
   name: string,
@@ -312,23 +315,15 @@ export async function getShareLink(
   const ip = await clientIp();
 
   const policy = await getBucketPolicy(bucket);
-  const apiBaseUrl = (process.env.API_PUBLIC_URL ?? "").replace(/\/+$/, "");
 
   let url: string;
   let expiresAt: string | null = null;
 
   if (policy.visibility === "public") {
-    const encodedKey = name.split("/").map(encodeURIComponent).join("/");
-    url = `${apiBaseUrl}/storage/v1/object/public/${encodeURIComponent(bucket)}/${encodedKey}`;
+    url = publicObjectUrl(bucket, name);
   } else {
-    const signed = signObjectUrl({
-      apiBaseUrl,
-      bucket,
-      key: name,
-      expiresInSeconds: expirySeconds,
-    });
-    url = signed.url;
-    expiresAt = signed.expires_at;
+    url = await publicSignedObjectUrl("GET", bucket, name, expirySeconds);
+    expiresAt = new Date(Date.now() + expirySeconds * 1000).toISOString();
   }
 
   await audit({

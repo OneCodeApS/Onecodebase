@@ -23,7 +23,7 @@ Internet → 109.200.76.147 (APPS01 + Caddy, TLS termination + Let's Encrypt)
 - App server provisioned in LAN with a private IP.
 - Docker + Compose v2 installed (`curl -fsSL https://get.docker.com | sh`).
 - The deploy user (e.g. `onecode`) in the `docker` group: `sudo usermod -aG docker onecode && newgrp docker`.
-- Three subdomains created at Curanet, all pointing to `109.200.76.147` (APPS01).
+- Two subdomains (`api.*`, `dashboard.*`) created at Curanet, both pointing to `109.200.76.147` (APPS01). Storage no longer needs its own subdomain.
 - Miit firewall rule confirmed open: APPS01 (`10.1.116.34`) → this server's IP on TCP 80.
 
 ## Setup steps
@@ -43,18 +43,26 @@ git checkout v0.1.0
 
 APPS01 handles TLS, so this server's Caddy only does internal Host-header routing on port 80.
 
+> **Note:** this template predates the storage proxy (PgBouncer, /storage/v1 routing) and is missing the path-prefix `handle` blocks the bundled Caddyfile has. For a production deploy behind APPS01 today, take the bundled `caddy/Caddyfile` and replace every `https://` block with `http://` plus drop the `tls` line. The `tls {$CADDY_TLS}` line in particular must go — APPS01 terminates TLS.
+
 ```bash
 {
 echo "http://{\$API_HOST} {"
-echo "    reverse_proxy postgrest:3000"
+echo "    handle_path /rest/v1/* { reverse_proxy postgrest:3000 }"
+echo "    handle_path /rpc/v1/* { rewrite * /rpc{uri}; reverse_proxy postgrest:3000 }"
+echo "    handle /auth/v1/* { reverse_proxy dashboard:3000 }"
+echo "    handle /realtime* { reverse_proxy dashboard:3000 }"
+echo "    handle /functions/v1/* { reverse_proxy dashboard:3000 }"
+echo "    handle /storage/v1/object/sign-batch { reverse_proxy dashboard:3000 }"
+echo "    handle /storage/v1/object/sign/* { reverse_proxy dashboard:3000 }"
+echo "    handle /storage/v1/object/upload/* { reverse_proxy dashboard:3000 }"
+echo "    handle_path /storage/v1/object/* {"
+echo "        reverse_proxy minio:9000 { header_up Host {host} }"
+echo "    }"
 echo "}"
 echo ""
 echo "http://{\$DASHBOARD_HOST} {"
 echo "    reverse_proxy dashboard:3000"
-echo "}"
-echo ""
-echo "http://{\$FILES_HOST} {"
-echo "    reverse_proxy minio:9000"
 echo "}"
 } > caddy/Caddyfile
 ```
@@ -63,7 +71,7 @@ echo "}"
 
 **Critical:** do NOT use `openssl rand -base64` for any password. Base64 contains `/`, `+`, and `=`, which break the URI-embedded password pattern in `docker-compose.yml`. Always use hex.
 
-Fill in the three subdomain values for this server before pasting:
+Fill in the two subdomain values for this server before pasting:
 
 ```bash
 {
@@ -78,10 +86,8 @@ echo "MINIO_ROOT_PASSWORD=$(openssl rand -hex 24)"
 echo "SESSION_SECRET=$(openssl rand -hex 32)"
 echo "API_HOST=api.<your-subdomain>.madebyonecode.dk"
 echo "DASHBOARD_HOST=dashboard.<your-subdomain>.madebyonecode.dk"
-echo "FILES_HOST=files.<your-subdomain>.madebyonecode.dk"
 echo "API_PUBLIC_URL=https://api.<your-subdomain>.madebyonecode.dk"
 echo "DASHBOARD_PUBLIC_URL=https://dashboard.<your-subdomain>.madebyonecode.dk"
-echo "MINIO_PUBLIC_URL=https://files.<your-subdomain>.madebyonecode.dk"
 echo "CADDY_TLS=internal"
 echo "GHCR_OWNER=onecodeaps"
 echo "DASHBOARD_IMAGE_TAG=0.1.0"
@@ -140,39 +146,30 @@ echo "        header_up Host {host}"
 echo "        header_up X-Real-IP {remote_host}"
 echo "    }"
 echo "}"
-echo ""
-echo "files.<your-subdomain>.madebyonecode.dk {"
-echo "    import logging"
-echo "    reverse_proxy <app-server-ip>:80 {"
-echo "        header_up Host {host}"
-echo "        header_up X-Real-IP {remote_host}"
-echo "    }"
-echo "}"
 } > /etc/caddy/sites/<your-subdomain>.caddy'
 
 sudo caddy validate --config /etc/caddy/Caddyfile
 sudo systemctl restart caddy
 ```
 
-`header_up Host {host}` is the critical line — without it, all three subdomains look identical to the app server's Caddy and routing fails.
+`header_up Host {host}` is the critical line — without it, both subdomains look identical to the app server's Caddy and routing fails.
 
-Watch Caddy acquire the three Let's Encrypt certs:
+Watch Caddy acquire the two Let's Encrypt certs:
 
 ```bash
 sudo journalctl -u caddy -f --since "30 seconds ago"
 ```
 
-Look for three `certificate obtained successfully` lines, one per subdomain.
+Look for two `certificate obtained successfully` lines, one per subdomain.
 
 ### 7. Test end-to-end from your laptop
 
 ```cmd
-curl -I https://api.<your-subdomain>.madebyonecode.dk/todos
+curl -I https://api.<your-subdomain>.madebyonecode.dk/rest/v1/todos
 curl -I https://dashboard.<your-subdomain>.madebyonecode.dk
-curl -I https://files.<your-subdomain>.madebyonecode.dk
 ```
 
-Expected: `200`, `307` (redirect to /login), `400` (MinIO XML error — responding as expected).
+Expected: `200` (with two seeded todos), `307` (redirect to /login).
 
 Open the dashboard in a browser and sign in with the admin you created.
 

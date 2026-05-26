@@ -45,11 +45,14 @@ export const minio: Client = new Proxy({} as Client, {
   },
 });
 
-// Public-facing client — same credentials but configured with the hostname
-// the user's browser will actually use (presigned GET URLs, etc.). Configured
-// from MINIO_PUBLIC_URL; falls back to the internal client if not set.
+// Public-signing client — same MinIO credentials, but configured against the
+// PUBLIC api hostname so SigV4 is computed for the host the browser will hit.
+// Built from API_PUBLIC_URL. The URL the SDK produces is path-style and does
+// NOT include /storage/v1/object — callers insert that prefix via
+// publicSignedObjectUrl() / publicObjectUrl() below. Caddy strips the prefix
+// before forwarding to MinIO, so the signed path matches what MinIO verifies.
 function buildPublicClient(): Client | null {
-  const publicUrl = process.env.MINIO_PUBLIC_URL;
+  const publicUrl = process.env.API_PUBLIC_URL;
   const accessKey = process.env.MINIO_ACCESS_KEY;
   const secretKey = process.env.MINIO_SECRET_KEY;
   if (!publicUrl || !accessKey || !secretKey) return null;
@@ -81,3 +84,34 @@ export const minioPublic: Client = new Proxy({} as Client, {
     return typeof value === "function" ? value.bind(target) : value;
   },
 });
+
+// Returns a SigV4-signed URL for `method bucket/key` against the public api
+// host, with /storage/v1/object/ inserted into the path. Caddy strips that
+// prefix before forwarding to MinIO; what MinIO verifies is the URL the SDK
+// originally signed, so the signature matches.
+export async function publicSignedObjectUrl(
+  method: "GET" | "PUT",
+  bucket: string,
+  key: string,
+  expiresInSeconds: number,
+): Promise<string> {
+  const raw =
+    method === "GET"
+      ? await minioPublic.presignedGetObject(bucket, key, expiresInSeconds)
+      : await minioPublic.presignedPutObject(bucket, key, expiresInSeconds);
+  return injectStoragePrefix(raw);
+}
+
+// For public buckets: MinIO's anonymous-read ACL is set on the bucket, so no
+// SigV4 is needed. The URL is the same shape minus the query string.
+export function publicObjectUrl(bucket: string, key: string): string {
+  const base = (process.env.API_PUBLIC_URL ?? "").replace(/\/+$/, "");
+  const encodedKey = key.split("/").map(encodeURIComponent).join("/");
+  return `${base}/storage/v1/object/${encodeURIComponent(bucket)}/${encodedKey}`;
+}
+
+function injectStoragePrefix(presignedUrl: string): string {
+  const u = new URL(presignedUrl);
+  u.pathname = `/storage/v1/object${u.pathname}`;
+  return u.toString();
+}

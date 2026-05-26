@@ -124,19 +124,23 @@ export default async function ApiKeysPage() {
               <td className="py-1">/functions/v1/&lt;name&gt;</td>
             </tr>
             <tr>
-              <td className="py-1 pr-4 text-neutral-400">Storage proxy</td>
-              <td className="py-1">/storage/v1/object/&lt;public|sign|upload&gt;/…</td>
+              <td className="py-1 pr-4 text-neutral-400">Storage (issue URL)</td>
+              <td className="py-1">/storage/v1/object/&lt;sign|sign-batch|upload&gt;/…</td>
+            </tr>
+            <tr>
+              <td className="py-1 pr-4 text-neutral-400">Storage (data)</td>
+              <td className="py-1">/storage/v1/object/&lt;bucket&gt;/&lt;key&gt;?…</td>
             </tr>
           </tbody>
         </table>
         <p className="mt-3 text-xs text-neutral-500">
-          Storage clients hit{" "}
-          <span className="font-mono text-neutral-300">api.*/storage/v1</span>{" "}
-          for authorization; the proxy then 302s to a 60-second MinIO
-          presigned URL on{" "}
-          <span className="font-mono text-neutral-300">files.&lt;your-host&gt;</span>{" "}
-          for the actual byte stream. The data-plane hostname is internal —
-          don&apos;t embed it in clients.
+          Storage clients POST to{" "}
+          <span className="font-mono text-neutral-300">/storage/v1/object/sign/…</span>{" "}
+          (or <span className="font-mono text-neutral-300">/upload/…</span>) to
+          get a short-lived SigV4-signed URL, then GET/PUT that URL directly.
+          The data path strips the prefix in Caddy and goes straight to MinIO —
+          Node is never in the byte stream, so video/large-file traffic scales
+          with MinIO bandwidth.
         </p>
       </Card>
 

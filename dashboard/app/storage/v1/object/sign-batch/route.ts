@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { verifyJwtSignature } from "@/lib/auth-jwt";
+import { publicSignedObjectUrl } from "@/lib/minio";
 import { corsPreflight, withCors } from "@/lib/cors";
-import { signObjectUrl } from "@/lib/storage-signing";
 
 const METHODS = ["POST"] as const;
 const DEFAULT_SIGN_TTL = 60 * 60;
@@ -13,10 +13,8 @@ type Body = { items: Item[]; expires_in?: number };
 
 // POST /storage/v1/object/sign-batch
 //
-// Mints up to MAX_BATCH signed download URLs in one round-trip. Galleries
-// rendering N thumbnails should call this once rather than N times — the
-// per-request cost is JWT verification + HMAC computation per item; both
-// are O(microseconds), so a batch of 100 is cheap to serve.
+// Mints up to MAX_BATCH SigV4-signed GET URLs in one round-trip. Use for
+// galleries / grids that would otherwise issue N sequential POSTs.
 async function handler(req: NextRequest) {
   const claims = await readJwt(req);
   if (!claims) {
@@ -46,17 +44,24 @@ async function handler(req: NextRequest) {
   }
 
   const ttl = clampTtl(body.expires_in ?? DEFAULT_SIGN_TTL);
-  const apiBaseUrl = resolveApiBaseUrl(req);
+  const expiresAt = new Date(Date.now() + ttl * 1000).toISOString();
 
-  const items = body.items.map((it) => {
-    const signed = signObjectUrl({
-      apiBaseUrl,
-      bucket: it.bucket,
-      key: it.key,
-      expiresInSeconds: ttl,
-    });
-    return { bucket: it.bucket, key: it.key, ...signed };
-  });
+  // SDK calls are synchronous CPU work (HMAC + URL building); no need to
+  // serialize them sequentially.
+  const items = await Promise.all(
+    body.items.map(async (it) => {
+      try {
+        const url = await publicSignedObjectUrl("GET", it.bucket, it.key, ttl);
+        return { bucket: it.bucket, key: it.key, url, expires_at: expiresAt };
+      } catch (e) {
+        return {
+          bucket: it.bucket,
+          key: it.key,
+          error: (e as Error).message,
+        };
+      }
+    }),
+  );
 
   return NextResponse.json({ items });
 }
@@ -77,14 +82,6 @@ async function readJwt(req: NextRequest) {
   } catch {
     return null;
   }
-}
-
-function resolveApiBaseUrl(req: NextRequest): string {
-  const env = process.env.API_PUBLIC_URL?.replace(/\/+$/, "");
-  if (env) return env;
-  const proto = req.headers.get("x-forwarded-proto") ?? "https";
-  const host = req.headers.get("x-forwarded-host") ?? req.nextUrl.host;
-  return `${proto}://${host}`;
 }
 
 export const POST = withCors(handler, { methods: METHODS });
