@@ -65,8 +65,10 @@ export function mimeAllowed(mime: string, allowed: string[] | null): boolean {
   });
 }
 
-// Generates the AWS-style anonymous-read bucket policy MinIO accepts to
-// expose every object in a bucket publicly via GET.
+// AWS-style bucket policy MinIO accepts to allow anonymous GET on every
+// object. Mirrored to MinIO whenever a bucket is set to "public" — Caddy
+// strips /storage/v1/object before forwarding, so MinIO sees a regular
+// path-style request and the anonymous-read ACL applies.
 export function publicReadPolicy(bucket: string): string {
   return JSON.stringify({
     Version: "2012-10-17",

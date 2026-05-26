@@ -37,10 +37,25 @@ Sorted roughly by when it bites, not by effort.
 ## Auth follow-ups (from the verify_jwt rollout)
 
 ### CORS on `/functions/v1/*`
-Edge functions now accept JWTs but don't set CORS headers. Browser apps calling from a different origin (e.g., your client app hosted on `app.example.com` calling `api.example.com/functions/v1/foo`) will hit CORS errors before the JWT ever gets checked.
+Edge functions accept JWTs but don't set CORS headers. The `lib/cors.ts` helper now used by `/auth/v1/*` is ready — function invocation routes just need to be wrapped with `withCors(handler, { methods: ["GET", "POST", ...] })` and export an `OPTIONS = corsPreflight(...)`. Per-function origin overrides (a `cors_origins` column on `_dashboard.functions`) can layer on top later if a single global allowlist isn't enough.
 
-- **Fix:** add `Access-Control-Allow-Origin`, `-Methods`, `-Headers` to the route response, plus an `OPTIONS` preflight handler. Either allow `*` (since the JWT is the actual gate) or make it a per-function setting.
-- **Note:** the dashboard's `apikey` header is non-standard, so `Access-Control-Allow-Headers` must include it explicitly.
+### Storage: resumable uploads (TUS / S3 multipart)
+Single-PUT presigned URLs work up to S3's per-object limit but can't resume on connection drop. Two options when this becomes a real problem:
+  - **S3 multipart via presigned URLs** — `POST /storage/v1/object/multipart/<bucket>/<key>` returns `upload_id` + N presigned part URLs. Client PUTs ~5 MB chunks in parallel; failed parts retried individually; `.../complete` tells MinIO to assemble. MinIO supports this natively.
+  - **TUS protocol** — Supabase's path. Server runs `tus-node-server`, client uses `tus-js-client`. The chunks would need to go through Node (TUS isn't an S3 protocol), so this gives up the "no Node in byte path" property — only worth it if the upload-resume UX matters more than the bandwidth cost.
+
+### Storage: per-bucket ACL beyond visibility
+The dashboard issues SigV4 URLs to any caller with an `authenticated` or `service_role` JWT — no per-bucket or per-object check beyond visibility. Once buckets need ownership-aware reads, add either:
+  - A `_dashboard.bucket_acl` table (bucket × role × perm), checked inside the sign / upload route handlers before minting the URL.
+  - Or a `_dashboard.storage_objects` table mirroring object → owner, with RLS policies against it (Supabase pattern; tracks objects in Postgres for free, but doubles writes per upload via MinIO bucket-notification events).
+
+### Storage: fetch-time audit via MinIO notifications
+URL issuance is audited via the server actions on the bucket UI, but the new public proxy routes (`/sign`, `/sign-batch`, `/upload`) write no audit rows yet — and MinIO data-plane fetches never touch the dashboard, so they're invisible to `_dashboard.audit_log`. Two fixes:
+  - **Issuance audit** — `await audit({...})` inside the sign/upload route handlers. Easy. Captures "user X requested a URL for bucket/key" but not whether it was used.
+  - **Fetch audit via MinIO webhooks** — `mc admin config set minio notify_webhook:audit endpoint=http://dashboard:3000/_internal/storage-events`; MinIO POSTs an event per S3 op (`s3:ObjectCreated:Put`, `s3:ObjectAccessed:Get`, `s3:ObjectRemoved:Delete`) with bucket / key / IP / status / size. Dashboard verifies a shared-secret header, writes via `lib/audit.ts`. Authoritative — catches what actually happened. User identity isn't recoverable from MinIO alone; correlate by issuance row + bucket/key/time if needed.
+
+### Storage: reserved bucket names
+Caddy routes `/storage/v1/object/sign/*`, `/sign-batch`, `/upload/*` to the dashboard before the strip-and-forward to MinIO. A bucket literally named `sign`, `sign-batch`, or `upload` is unreachable as a result. Add those to the bucket-name validation in `app/(app)/storage/actions.ts:BUCKET_NAME` to fail early.
 
 ### Per-function role policy
 `verify_jwt` is binary today: any signed JWT works (anon / authenticated / service_role). For most functions an admin probably wants more: "only authenticated users, not anon" or "service_role only".

@@ -7,8 +7,11 @@ import {
   verifyPassword,
 } from "@/lib/auth-users";
 import { isProviderEnabled } from "@/lib/auth-settings";
+import { corsPreflight, withCors } from "@/lib/cors";
 
-export async function POST(req: NextRequest) {
+const METHODS = ["POST"] as const;
+
+async function handler(req: NextRequest) {
   if (!(await isProviderEnabled("email"))) {
     return NextResponse.json({ error: "email_provider_disabled" }, { status: 403 });
   }
@@ -49,3 +52,6 @@ export async function POST(req: NextRequest) {
     refresh_expires_at: session.expiresAt.toISOString(),
   });
 }
+
+export const POST = withCors(handler, { methods: METHODS });
+export const OPTIONS = corsPreflight({ methods: METHODS });

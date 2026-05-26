@@ -4,7 +4,7 @@ import { Buffer } from "node:buffer";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { minio, minioPublic, minioPublicBaseUrl } from "@/lib/minio";
+import { minio, publicObjectUrl, publicSignedObjectUrl } from "@/lib/minio";
 import {
   getBucketPolicy,
   mimeAllowed,
@@ -263,8 +263,10 @@ export async function updateBucketPolicy(formData: FormData) {
   let errMsg: string | null = null;
   try {
     await setBucketPolicy(policy, session.userId ?? null);
-    // Mirror visibility to MinIO. Public → anonymous GET allowed.
-    // Private → clear the policy (empty string removes the bucket policy).
+    // Mirror visibility to MinIO. Caddy strips /storage/v1/object before
+    // forwarding, so MinIO sees a plain path-style request and applies its
+    // own bucket ACL. Public buckets get anonymous-read; private buckets
+    // get the policy cleared (only valid SigV4 URLs work).
     if (visibility === "public") {
       await minio.setBucketPolicy(bucket, publicReadPolicy(bucket));
     } else {
@@ -298,9 +300,12 @@ export async function updateBucketPolicy(formData: FormData) {
   redirect(`/storage/${bucket}?ok=${encodeURIComponent("Policy updated")}`);
 }
 
-// Returns a sharable URL for the object. For public buckets, just the direct
-// MinIO public URL (no expiry). For private buckets, a presigned GET URL with
-// the requested expiry. Audited so leaked links are traceable.
+// Returns a sharable URL for the object. Both routes resolve under
+// api.<host>/storage/v1/object/<bucket>/<key>:
+//   - public  → no query string; MinIO's anonymous-read ACL serves it
+//   - private → SigV4-signed; valid for `expirySeconds`
+// Caddy strips /storage/v1/object before forwarding, so the path MinIO
+// verifies the signature against matches what the SDK signed.
 export async function getShareLink(
   bucket: string,
   name: string,
@@ -310,15 +315,14 @@ export async function getShareLink(
   const ip = await clientIp();
 
   const policy = await getBucketPolicy(bucket);
-  const publicBase = minioPublicBaseUrl();
 
   let url: string;
   let expiresAt: string | null = null;
 
-  if (policy.visibility === "public" && publicBase) {
-    url = `${publicBase}/${encodeURIComponent(bucket)}/${encodeURIComponent(name).replace(/%2F/g, "/")}`;
+  if (policy.visibility === "public") {
+    url = publicObjectUrl(bucket, name);
   } else {
-    url = await minioPublic.presignedGetObject(bucket, name, expirySeconds);
+    url = await publicSignedObjectUrl("GET", bucket, name, expirySeconds);
     expiresAt = new Date(Date.now() + expirySeconds * 1000).toISOString();
   }
 

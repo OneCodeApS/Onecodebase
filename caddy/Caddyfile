@@ -1,4 +1,4 @@
-# Caddyfile — routes the three public subdomains.
+# Caddyfile — routes the public subdomains.
 #
 # CADDY_TLS controls TLS behavior:
 #   - "internal"      → Caddy's local CA (good for *.localhost dev)
@@ -8,19 +8,91 @@
 #   docker compose exec caddy caddy trust
 #   (or import /data/caddy/pki/authorities/local/root.crt on the host)
 
+# api.* is the single public surface for everything client apps consume:
+#   /rest/v1/<table>    → PostgREST table CRUD (strip prefix → PostgREST /<table>)
+#   /rpc/v1/<fn>        → PostgREST RPC (/rpc/v1/foo → /rpc/foo)
+#   /auth/v1/*          → dashboard's end-user auth API
+#   /realtime           → dashboard's SSE stream
+#   /functions/v1/<fn>  → dashboard's edge-function router
+#
+# Storage is split: POST endpoints (URL issuance) hit the dashboard so it can
+# enforce bucket policy + JWT auth. Everything else under /storage/v1/object/
+# strips the prefix and goes straight to MinIO — SigV4 signatures issued by
+# the dashboard match exactly what MinIO recomputes from the stripped path,
+# so video/large-file traffic never touches Node.
 {$API_HOST} {
 	tls {$CADDY_TLS}
-	reverse_proxy postgrest:3000
+
+	handle_path /rest/v1/* {
+		reverse_proxy postgrest:3000
+	}
+
+	handle_path /rpc/v1/* {
+		rewrite * /rpc{uri}
+		reverse_proxy postgrest:3000
+	}
+
+	handle /auth/v1/* {
+		reverse_proxy dashboard:3000
+	}
+
+	handle /realtime* {
+		reverse_proxy dashboard:3000
+	}
+
+	handle /functions/v1/* {
+		reverse_proxy dashboard:3000
+	}
+
+	# Storage URL-issuance endpoints — dashboard only.
+	handle /storage/v1/object/sign-batch {
+		reverse_proxy dashboard:3000
+	}
+	handle /storage/v1/object/sign/* {
+		reverse_proxy dashboard:3000
+	}
+	handle /storage/v1/object/upload/* {
+		reverse_proxy dashboard:3000
+	}
+
+	# Everything else under /storage/v1/object/* → MinIO directly.
+	# The Host header MUST be preserved or SigV4 verification fails:
+	# the SDK signs against the public api hostname, MinIO recomputes the
+	# canonical request from what it receives, and a mismatched Host
+	# (Caddy's default behavior would set it to minio:9000) breaks the
+	# signature. `header_up Host {host}` keeps the original value.
+	handle_path /storage/v1/object/* {
+		reverse_proxy minio:9000 {
+			header_up Host {host}
+		}
+	}
+
+	# Everything else on api.* is undefined.
+	handle {
+		respond 404
+	}
 }
 
+# dashboard.* is the operator console only. The public API paths live on api.*
+# and we explicitly 404 them here so there's a single canonical surface to
+# secure, advertise, and configure CORS for.
 {$DASHBOARD_HOST} {
 	tls {$CADDY_TLS}
-	reverse_proxy dashboard:3000
-}
 
-{$FILES_HOST} {
-	tls {$CADDY_TLS}
-	# MinIO S3 API. The web console is on :9001 and intentionally not exposed —
-	# the dashboard's file browser will talk to the S3 API directly.
-	reverse_proxy minio:9000
+	handle /auth/v1/* {
+		respond 404
+	}
+	handle /realtime* {
+		respond 404
+	}
+	handle /functions/v1/* {
+		respond 404
+	}
+	handle /storage/v1/* {
+		respond 404
+	}
+
+	handle {
+		reverse_proxy dashboard:3000
+	}
 }

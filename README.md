@@ -90,8 +90,8 @@ docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt ./caddy-root.
 ### 5. Use it
 
 - **Dashboard:** <https://dashboard.localhost> → sign in with the credentials from step 3.
-- **API:** <https://api.localhost/todos> → returns the seeded rows as JSON. Try `curl https://api.localhost/todos`.
-- **Files:** <https://files.localhost> → MinIO S3 endpoint. The web console (`:9001`) is intentionally not exposed; the dashboard will be the only UI for buckets.
+- **API:** <https://api.localhost/rest/v1/todos> → returns the seeded rows as JSON. Try `curl https://api.localhost/rest/v1/todos`. The API host also exposes `/rpc/v1/<fn>` (PostgREST RPC), `/auth/v1/*` (end-user auth), `/realtime` (SSE), and `/functions/v1/<name>` (edge functions).
+- **Storage:** <https://api.localhost/storage/v1> → POST to `/storage/v1/object/sign/<bucket>/<key>` (or `/upload/<bucket>/<key>`) to get a short-lived SigV4-signed URL, then GET/PUT directly. Caddy strips the `/storage/v1/object` prefix and forwards to internal MinIO; the dashboard never touches the byte stream. MinIO is no longer exposed under its own hostname.
 
 Direct DB access from the host (for psql, dbeaver, etc):
 
@@ -125,7 +125,9 @@ MINIO_PORT=9000
 MINIO_USE_SSL=false
 MINIO_ACCESS_KEY=<MINIO_ROOT_USER from root .env>
 MINIO_SECRET_KEY=<MINIO_ROOT_PASSWORD from root .env>
-MINIO_PUBLIC_URL=http://127.0.0.1:9000
+
+# Where storage URLs are signed against — must match what clients hit.
+API_PUBLIC_URL=https://api.localhost
 
 DASHBOARD_PUBLIC_URL=http://localhost:3000
 AUDIT_LOG_DIR=./audit-logs
@@ -173,15 +175,14 @@ The dashboard image is pre-built by CI and published to GHCR. Your server only p
 
 **1. Point DNS at the server.** Do this first — DNS propagation can take minutes to hours, and Caddy needs working DNS to obtain TLS certs in step 8.
 
-In your DNS provider, create three A records pointing at the server's public IP:
+In your DNS provider, create two A records pointing at the server's public IP:
 
 | Record | Value |
 | --- | --- |
 | `api.example.com` | `<server-ip>` |
 | `dashboard.example.com` | `<server-ip>` |
-| `files.example.com` | `<server-ip>` |
 
-Verify resolution before continuing: `dig +short api.example.com` should return your server's IP.
+Verify resolution before continuing: `dig +short api.example.com` should return your server's IP. (Storage no longer needs its own subdomain — MinIO is now internal, served via Caddy on `api.example.com/storage/v1`.)
 
 **2. Install Docker on the server.**
 
@@ -242,10 +243,8 @@ DASHBOARD_IMAGE_TAG=0.1.0
 
 API_HOST=api.example.com
 DASHBOARD_HOST=dashboard.example.com
-FILES_HOST=files.example.com
 API_PUBLIC_URL=https://api.example.com
 DASHBOARD_PUBLIC_URL=https://dashboard.example.com
-MINIO_PUBLIC_URL=https://files.example.com
 
 CADDY_TLS=you@your-domain.com
 ```
@@ -282,7 +281,7 @@ Quick sanity checks:
 docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
 
 # Sample API returns the seeded rows.
-curl https://api.example.com/todos
+curl https://api.example.com/rest/v1/todos
 ```
 
 Install complete.

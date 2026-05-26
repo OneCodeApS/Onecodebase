@@ -29,20 +29,20 @@ The example below uses `example.com` and IP `203.0.113.10`. Replace these with y
 
 ### Step 1 — Point DNS at the server
 
-In your DNS provider, create three A records pointing at the server's public IP. Do this **first** because DNS propagation can take anywhere from a minute to an hour, and Caddy needs working DNS in step 9 to obtain TLS certs.
+In your DNS provider, create two A records pointing at the server's public IP. Do this **first** because DNS propagation can take anywhere from a minute to an hour, and Caddy needs working DNS in step 9 to obtain TLS certs.
 
 | Record | Type | Value |
 | --- | --- | --- |
 | `api.example.com` | A | `203.0.113.10` |
 | `dashboard.example.com` | A | `203.0.113.10` |
-| `files.example.com` | A | `203.0.113.10` |
+
+Storage no longer needs its own subdomain — MinIO is internal, served via Caddy on `api.example.com/storage/v1`.
 
 Verify resolution before continuing:
 
 ```bash
 dig +short api.example.com
 dig +short dashboard.example.com
-dig +short files.example.com
 ```
 
 Each should return `203.0.113.10`. If they don't, wait and re-check.
@@ -164,10 +164,8 @@ SESSION_SECRET=<openssl rand -hex 32>
 # Hostnames
 API_HOST=api.example.com
 DASHBOARD_HOST=dashboard.example.com
-FILES_HOST=files.example.com
 API_PUBLIC_URL=https://api.example.com
 DASHBOARD_PUBLIC_URL=https://dashboard.example.com
-MINIO_PUBLIC_URL=https://files.example.com
 
 # Caddy / TLS — use your real email here
 CADDY_TLS=you@example.com
@@ -333,7 +331,7 @@ Caddy is still trying to acquire a Let's Encrypt cert and the ACME challenge is 
 
 - DNS isn't resolving yet. Wait, then `docker compose logs caddy` to confirm.
 - Port 80 isn't reachable from the public internet (firewall, cloud security group). The HTTP-01 challenge requires inbound port 80.
-- A typo in `API_HOST` / `DASHBOARD_HOST` / `FILES_HOST` in `.env`. Check the values match your DNS records exactly.
+- A typo in `API_HOST` / `DASHBOARD_HOST` in `.env`. Check the values match your DNS records exactly.
 
 ### "GHCR_OWNER must be set" or "repository name must be lowercase"
 

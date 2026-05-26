@@ -8,6 +8,41 @@ While the project is on `0.x`, minor version bumps (`0.1 → 0.2`) may include b
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-05-26
+
+Public APIs consolidated under a single `api.*` host, end-user auth gets CORS, storage moves out from under its own subdomain to `api.*/storage/v1/object/*` (Caddy strips the prefix and forwards directly to MinIO — no Node in the byte path, so large videos and Range requests scale with MinIO bandwidth). Operator console gains the version chip, system-schema toggle in the tables browser, and reusable Loader / RefreshButton components.
+
+### Added
+
+- **Public API consolidation under `api.*`** — `/rest/v1/<table>` (PostgREST tables), `/rpc/v1/<fn>` (PostgREST RPC), `/auth/v1/*` (end-user auth), `/realtime` (SSE), `/functions/v1/<name>` (edge functions), and `/storage/v1/object/*` (storage proxy) all live on the api host. `dashboard.*` returns 404 for the API paths so there's one canonical surface for clients, docs, and CORS.
+- **CORS at `lib/cors.ts`** — `withCors(handler, { methods })` adds `Access-Control-*` headers; `corsPreflight({ methods })` handles OPTIONS. Origin allowlist driven by new `AUTH_ALLOWED_ORIGINS` env var (empty / `*` / comma-separated origins). Applied to every `/auth/v1/*` route and the storage URL-issuance endpoints. Non-browser callers (curl, server-to-server) ignore CORS and keep working regardless of the setting.
+- **Storage URL-issuance endpoints** — `POST /storage/v1/object/sign/<bucket>/<key>` returns a short-lived SigV4 GET URL; `POST /storage/v1/object/sign-batch` mints up to 100 in one call (for galleries); `POST /storage/v1/object/upload/<bucket>/<key>` validates bucket policy (max size, MIME allowlist) and returns a 5-minute presigned PUT. JWT-gated (authenticated or service_role).
+- **System-schema toggle in the tables browser** — `_dashboard` and `auth` schemas are hidden by default; a "Show system schemas" checkbox in the sidebar reveals them and persists to localStorage. When a system schema is active, the sidebar shows a "Read-only · use the admin UI" pill; the row viewer shows a banner linking to the dedicated admin page (Dashboard users, End users, Audit log, Edge functions, Cron jobs, Storage buckets, Auth providers). SQL editor stays unrestricted as the escape hatch.
+- **Reusable Loader / RefreshButton components** — `<Loader size="…" label="…" />` for inline spinners (drops into buttons or table cells); `<LoaderBlock />` for centered card-level loading; `<RefreshButton onRefresh?={…} />` calls `router.refresh()` inside a `useTransition` so server-rendered pages re-fetch with visible pending state. `tables/[name]/loading.tsx` wires up the Suspense fallback so the spinner shows on navigation, pagination, schema switches, and refresh.
+- **Dashboard version chip in the sidebar** — `v<package.json#version>` rendered next to the "Onecodebase" header.
+
+### Changed
+
+- **Storage architecture: Caddy strip-and-forward** — `/storage/v1/object/*` is matched by Caddy on the api host. The three URL-issuance prefixes (`/sign/*`, `/sign-batch`, `/upload/*`) go to the dashboard; everything else under `/storage/v1/object/*` strips the prefix and forwards to internal MinIO. `header_up Host {host}` preserves the original Host header so SigV4 verifies against the same hostname the SDK signed. Bytes never traverse Node; HTTP Range requests / video seeking work natively because MinIO handles them.
+- **`getShareLink` returns api-host URLs** — public buckets get `api.<host>/storage/v1/object/<bucket>/<key>` (no query; MinIO's anonymous-read ACL serves them); private buckets get the same path with a SigV4 query string. Caddy strips the prefix before MinIO sees the request, so signatures verify.
+- **Sidebar scroll lock** — `(app)/layout.tsx` uses `h-screen overflow-hidden` (was `min-h-screen`) and `<main>` is the only scroll context, so long tables don't push the sidebar off-screen.
+- **`FUNCTION_ENV_KEY` and `API_PUBLIC_URL` forwarded to the dashboard container** — both were latent bugs. `FUNCTION_ENV_KEY` was added in v1.0.0 but never wired through `docker-compose.yml`, so encrypted-env reads would have failed in a containerized install with a missing-key error. `API_PUBLIC_URL` is needed by `lib/minio.ts` to know which endpoint to sign storage URLs against.
+- **MinIO `MINIO_BROWSER_REDIRECT_URL`** — now derived from `DASHBOARD_PUBLIC_URL` instead of `MINIO_PUBLIC_URL` (MinIO's console isn't publicly exposed and the old env var is gone).
+
+### Removed
+
+- **`files.*` hostname** — Caddy block and DNS record both retired. MinIO is internal-only, reached exclusively through `api.*/storage/v1/object/*`.
+- **`FILES_HOST` and `MINIO_PUBLIC_URL` env vars** — gone from `.env.example`, `docker-compose.yml`, and both deployment guides.
+- **Dead helpers** — `lib/minio.ts:minioPublicBaseUrl()` and `lib/storage.ts:publicReadPolicy()` (briefly removed earlier in this cycle, then restored when the visibility mirror returned); the abandoned `lib/storage-signing.ts` HMAC scheme that the first storage-proxy iteration used.
+
+### Breaking
+
+- **All public API URLs moved to `api.*` with new prefixes.** Tables at `https://api.<host>/<table>` → `https://api.<host>/rest/v1/<table>`. The same applies to RPC, auth, realtime, functions, and storage. Clients pointed at the old paths will 404. `dashboard.<host>` returns 404 for those paths now (used to forward them to the dashboard process); update any internal callers.
+- **`files.<host>` is gone.** Existing presigned URLs from v1.2.0 stop resolving after the Caddy reload. The dashboard's Share button reissues against the new host; rerun any pinned share links you want to keep.
+- **Public buckets need their MinIO ACL re-saved once.** The v1.2.0 → v1.3.0 churn intentionally cleared MinIO's anonymous-read policy mid-transition, then put it back in the final design. Open each public bucket's policy modal once and click Save — the dashboard re-mirrors the ACL, no other action needed.
+- **`AUTH_ALLOWED_ORIGINS` is empty by default.** Browser apps from any cross-origin host will be blocked by CORS until this is set (`*` for local dev, explicit origin list for production). Non-browser clients (curl, server-to-server) work without it.
+- **`FUNCTION_ENV_KEY` is now required at container start.** Existing installs that worked through v1.2.0 by chance (the env key wasn't enforced) will now fail to start the dashboard container until the key is in `.env`. Generate with `openssl rand -hex 32`.
+
 ## [1.2.0] - 2026-05-26
 
 Design refresh for the login page.
@@ -118,7 +153,8 @@ First milestone. Auth + reverse proxy + sample API working end-to-end. No dashbo
 - Session cookies are encrypted with `SESSION_SECRET` (≥32 chars enforced at module load).
 - Server actions on `/login` enforce same-origin posts (Next.js built-in).
 
-[Unreleased]: https://github.com/OneCodeApS/Onecodebase/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/OneCodeApS/Onecodebase/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/OneCodeApS/Onecodebase/releases/tag/v1.3.0
 [1.2.0]: https://github.com/OneCodeApS/Onecodebase/releases/tag/v1.2.0
 [1.1.0]: https://github.com/OneCodeApS/Onecodebase/releases/tag/v1.1.0
 [1.0.0]: https://github.com/OneCodeApS/Onecodebase/releases/tag/v1.0.0

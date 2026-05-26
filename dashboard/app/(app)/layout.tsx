@@ -6,12 +6,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // is guaranteed here. Fallback values keep TypeScript happy.
   const session = await getSession();
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-screen overflow-hidden">
       <Sidebar
         email={session.email ?? ""}
         role={session.role ?? "read_only"}
       />
-      <main className="flex-1 overflow-auto">{children}</main>
+      <main className="flex-1 overflow-y-auto">{children}</main>
     </div>
   );
 }

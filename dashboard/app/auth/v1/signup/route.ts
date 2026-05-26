@@ -14,6 +14,9 @@ import {
   isProviderEnabled,
   type PasswordRequirements,
 } from "@/lib/auth-settings";
+import { corsPreflight, withCors } from "@/lib/cors";
+
+const METHODS = ["POST"] as const;
 
 function meetsRequirements(password: string, req: PasswordRequirements): boolean {
   const hasLower = /[a-z]/.test(password);
@@ -59,7 +62,7 @@ async function isPwned(password: string): Promise<boolean> {
   }
 }
 
-export async function POST(req: NextRequest) {
+async function handler(req: NextRequest) {
   const [settings, emailEnabled, emailCfg] = await Promise.all([
     getAuthSettings(),
     isProviderEnabled("email"),
@@ -144,3 +147,6 @@ export async function POST(req: NextRequest) {
     refresh_expires_at: session.expiresAt.toISOString(),
   });
 }
+
+export const POST = withCors(handler, { methods: METHODS });
+export const OPTIONS = corsPreflight({ methods: METHODS });
