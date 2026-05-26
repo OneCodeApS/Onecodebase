@@ -8,6 +8,14 @@ While the project is on `0.x`, minor version bumps (`0.1 → 0.2`) may include b
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-05-26
+
+Design refresh for the login page.
+
+### Changed
+
+- **Login page redesign** — visual overhaul of `/login`. Layout, typography, and form styling refreshed; supporting UI extracted into `dashboard/app/login/_components/` for reuse and clarity.
+
 ## [1.1.0] - 2026-05-22
 
 Operability + performance pass. The home page now gives admins a live overview, audit-log growth is bounded by a configurable retention window, deletes go through a single confirmation modal, and the data path is sized for a few hundred concurrent users via connection pooling + edge-function compile caching.
@@ -110,7 +118,8 @@ First milestone. Auth + reverse proxy + sample API working end-to-end. No dashbo
 - Session cookies are encrypted with `SESSION_SECRET` (≥32 chars enforced at module load).
 - Server actions on `/login` enforce same-origin posts (Next.js built-in).
 
-[Unreleased]: https://github.com/OneCodeApS/Onecodebase/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/OneCodeApS/Onecodebase/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/OneCodeApS/Onecodebase/releases/tag/v1.2.0
 [1.1.0]: https://github.com/OneCodeApS/Onecodebase/releases/tag/v1.1.0
 [1.0.0]: https://github.com/OneCodeApS/Onecodebase/releases/tag/v1.0.0
 [0.1.0]: https://github.com/OneCodeApS/Onecodebase/releases/tag/v0.1.0
