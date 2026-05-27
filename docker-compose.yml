@@ -1,6 +1,12 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    # PG18 for the native uuidv7() function used as the default PK generator
+    # in new tables (see postgres/init/04_sample_schema.sql).
+    # NOTE: a data volume created by an older major (e.g. 16) will NOT start
+    # under 18 — Postgres refuses to run against an incompatible data dir.
+    # Upgrading an existing install needs a dump/restore (or pg_upgrade);
+    # a fresh install just initialises cleanly.
+    image: postgres:18-alpine
     restart: unless-stopped
     # Headroom over the combined pools (dashboard 30 + PostgREST 30 + ad-hoc
     # admin connections). 150 fits within the 2 GB recommended RAM — each
