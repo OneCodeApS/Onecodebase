@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { pool } from "@/lib/db";
-import type { UserRole } from "@/lib/session";
+import { getSession, type UserRole } from "@/lib/session";
 import { Card } from "../../_components/Card";
-import { createUser, disableUser, enableUser, promoteToAdmin } from "./actions";
+import { createUser, disableUser, enableUser } from "./actions";
+import { RoleSelect } from "./RoleSelect";
 
 type Row = {
   id: string;
@@ -27,6 +28,7 @@ export default async function UsersPage({
   searchParams: Promise<{ error?: string; ok?: string }>;
 }) {
   const sp = await searchParams;
+  const session = await getSession();
   const users = await loadUsers();
 
   return (
@@ -105,7 +107,13 @@ export default async function UsersPage({
                 className="border-b border-neutral-800 last:border-b-0 odd:bg-neutral-900 even:bg-neutral-950/40 hover:bg-neutral-800/50"
               >
                 <td className="px-5 py-2 font-mono">{u.email}</td>
-                <td className="py-2 pr-3">{u.role}</td>
+                <td className="py-2 pr-3">
+                  <RoleSelect
+                    id={u.id}
+                    role={u.role}
+                    editable={u.id !== session.userId}
+                  />
+                </td>
                 <td className="py-2 pr-3">
                   {u.disabled_at ? (
                     <span className="text-amber-400">disabled</span>
@@ -118,34 +126,18 @@ export default async function UsersPage({
                 </td>
                 <td className="py-2 pr-5">
                   {u.role !== "admin" && (
-                    <div className="flex items-center gap-3">
-                      {/* Only promote active users — an admin can't be
-                          re-enabled from the UI, so promoting a disabled one
-                          would strand it as an unmanageable disabled admin. */}
-                      {!u.disabled_at && (
-                        <form action={promoteToAdmin} className="inline">
-                          <input type="hidden" name="id" value={u.id} />
-                          <button
-                            type="submit"
-                            className="text-xs text-neutral-400 underline hover:text-neutral-100"
-                          >
-                            Make admin
-                          </button>
-                        </form>
-                      )}
-                      <form
-                        action={u.disabled_at ? enableUser : disableUser}
-                        className="inline"
+                    <form
+                      action={u.disabled_at ? enableUser : disableUser}
+                      className="inline"
+                    >
+                      <input type="hidden" name="id" value={u.id} />
+                      <button
+                        type="submit"
+                        className="text-xs text-neutral-400 underline hover:text-neutral-100"
                       >
-                        <input type="hidden" name="id" value={u.id} />
-                        <button
-                          type="submit"
-                          className="text-xs text-neutral-400 underline hover:text-neutral-100"
-                        >
-                          {u.disabled_at ? "Enable" : "Disable"}
-                        </button>
-                      </form>
-                    </div>
+                        {u.disabled_at ? "Enable" : "Disable"}
+                      </button>
+                    </form>
                   )}
                 </td>
               </tr>

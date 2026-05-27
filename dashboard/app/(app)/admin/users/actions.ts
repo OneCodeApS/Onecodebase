@@ -24,7 +24,7 @@ async function requireAdmin() {
 
 // Roles the admin UI is allowed to assign. 'admin' is included so an existing
 // admin can grant admin to other operators (via the create form or the
-// promoteToAdmin action below). The CLI (npm run create-admin) remains the
+// setUserRole dropdown below). The CLI (npm run create-admin) remains the
 // bootstrap path for the very first admin. Every entry point here is behind
 // requireAdmin(), so only admins can hand out admin.
 const ASSIGNABLE_ROLES = ["admin", "read_write", "read_only"] as const;
@@ -121,39 +121,65 @@ export async function enableUser(formData: FormData) {
   redirect("/admin/users");
 }
 
-// Promote an existing operator to admin. Admin-gated like the rest. The
-// `role <> 'admin'` guard makes this a no-op (rowCount 0) if the target is
-// already an admin or the id is unknown; the audit row records either outcome.
-export async function promoteToAdmin(formData: FormData) {
+// Change an existing operator's role. Admin-gated like the rest. Guards against
+// demoting the last admin, which would leave no one able to reach the admin UI.
+export async function setUserRole(formData: FormData) {
   const session = await requireAdmin();
   const ip = await clientIp();
   const id = String(formData.get("id") ?? "");
+  const role = String(formData.get("role") ?? "") as AssignableRole;
   if (!id) redirect("/admin/users");
+  if (!ASSIGNABLE_ROLES.includes(role)) {
+    redirect("/admin/users?error=" + encodeURIComponent("Invalid role"));
+  }
+  // You can't change your own role — prevents self-lockout and forces a second
+  // admin to make the call.
+  if (id === session.userId) {
+    redirect("/admin/users?error=" + encodeURIComponent("You can't change your own role."));
+  }
 
-  const r = await pool().query<{ email: string }>(
-    `UPDATE _dashboard.users
-        SET role = 'admin',
-            updated_at = now()
-      WHERE id = $1 AND role <> 'admin'
-      RETURNING email`,
+  const cur = await pool().query<{ email: string; role: AssignableRole }>(
+    "SELECT email, role FROM _dashboard.users WHERE id = $1",
     [id],
   );
-  const target = r.rows[0]?.email ?? id;
+  if (cur.rows.length === 0) {
+    redirect("/admin/users?error=" + encodeURIComponent("User not found"));
+  }
+  const { email, role: currentRole } = cur.rows[0];
+
+  if (currentRole === role) {
+    redirect("/admin/users?ok=" + encodeURIComponent(`${email} is already ${role}`));
+  }
+
+  // Demoting the last admin would lock everyone out of the admin-only pages.
+  if (currentRole === "admin" && role !== "admin") {
+    const { rows } = await pool().query<{ n: number }>(
+      "SELECT count(*)::int AS n FROM _dashboard.users WHERE role = 'admin'",
+    );
+    if (rows[0].n <= 1) {
+      redirect(
+        "/admin/users?error=" +
+          encodeURIComponent("Can't change the last admin's role — promote another admin first."),
+      );
+    }
+  }
+
+  await pool().query(
+    "UPDATE _dashboard.users SET role = $2, updated_at = now() WHERE id = $1",
+    [id, role],
+  );
+
   await audit({
     actor: session.email!,
     actorId: session.userId!,
     role: "admin",
-    action: "user.promote",
-    target,
-    success: r.rowCount === 1,
+    action: "user.role_change",
+    target: email,
+    success: true,
     ip,
     sessionId: session.sessionId ?? null,
-    metadata: { role: "admin" },
+    metadata: { from: currentRole, to: role },
   });
 
-  redirect(
-    r.rowCount === 1
-      ? "/admin/users?ok=" + encodeURIComponent(`${target} is now an admin`)
-      : "/admin/users",
-  );
+  redirect("/admin/users?ok=" + encodeURIComponent(`${email}: ${currentRole} → ${role}`));
 }
