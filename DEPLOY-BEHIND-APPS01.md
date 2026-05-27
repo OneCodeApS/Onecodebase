@@ -41,23 +41,45 @@ git checkout v0.1.0
 
 ### 2. Replace `caddy/Caddyfile` with the HTTP-only version
 
-APPS01 handles TLS, so this server's Caddy only does internal Host-header routing on port 80.
+APPS01 handles TLS, so this server's Caddy only does internal Host-header routing on port 80. Start from the bundled `caddy/Caddyfile`, change each site address from `{$HOST}` to `http://{$HOST}`, and delete the `tls {$CADDY_TLS}` lines — APPS01 terminates TLS, so this Caddy must not.
 
-> **Note:** this template predates the storage proxy (PgBouncer, /storage/v1 routing) and is missing the path-prefix `handle` blocks the bundled Caddyfile has. For a production deploy behind APPS01 today, take the bundled `caddy/Caddyfile` and replace every `https://` block with `http://` plus drop the `tls` line. The `tls {$CADDY_TLS}` line in particular must go — APPS01 terminates TLS.
+> **Caddyfile syntax gotcha — keep every block multi-line.** An opening `{` must be the last token on its line, and a closing `}` must sit on its own line. Do **not** collapse a route onto one line like `handle_path /x/* { reverse_proxy y }` — Caddy's adapter rejects it, the container exits 1, and `docker compose ps` shows `caddy` stuck `Restarting`. Write it out exactly as below.
 
 ```bash
 {
 echo "http://{\$API_HOST} {"
-echo "    handle_path /rest/v1/* { reverse_proxy postgrest:3000 }"
-echo "    handle_path /rpc/v1/* { rewrite * /rpc{uri}; reverse_proxy postgrest:3000 }"
-echo "    handle /auth/v1/* { reverse_proxy dashboard:3000 }"
-echo "    handle /realtime* { reverse_proxy dashboard:3000 }"
-echo "    handle /functions/v1/* { reverse_proxy dashboard:3000 }"
-echo "    handle /storage/v1/object/sign-batch { reverse_proxy dashboard:3000 }"
-echo "    handle /storage/v1/object/sign/* { reverse_proxy dashboard:3000 }"
-echo "    handle /storage/v1/object/upload/* { reverse_proxy dashboard:3000 }"
+echo "    handle_path /rest/v1/* {"
+echo "        reverse_proxy postgrest:3000"
+echo "    }"
+echo "    handle_path /rpc/v1/* {"
+echo "        rewrite * /rpc{uri}"
+echo "        reverse_proxy postgrest:3000"
+echo "    }"
+echo "    handle /auth/v1/* {"
+echo "        reverse_proxy dashboard:3000"
+echo "    }"
+echo "    handle /realtime* {"
+echo "        reverse_proxy dashboard:3000"
+echo "    }"
+echo "    handle /functions/v1/* {"
+echo "        reverse_proxy dashboard:3000"
+echo "    }"
+echo "    handle /storage/v1/object/sign-batch {"
+echo "        reverse_proxy dashboard:3000"
+echo "    }"
+echo "    handle /storage/v1/object/sign/* {"
+echo "        reverse_proxy dashboard:3000"
+echo "    }"
+echo "    handle /storage/v1/object/upload/* {"
+echo "        reverse_proxy dashboard:3000"
+echo "    }"
 echo "    handle_path /storage/v1/object/* {"
-echo "        reverse_proxy minio:9000 { header_up Host {host} }"
+echo "        reverse_proxy minio:9000 {"
+echo "            header_up Host {host}"
+echo "        }"
+echo "    }"
+echo "    handle {"
+echo "        respond 404"
 echo "    }"
 echo "}"
 echo ""
@@ -66,6 +88,17 @@ echo "    reverse_proxy dashboard:3000"
 echo "}"
 } > caddy/Caddyfile
 ```
+
+Validate the syntax before relying on it. The `caddy:2.8-alpine` image has **no `caddy` entrypoint**, so the command must start with `caddy`; the dummy env values just satisfy the `{$…}` placeholders:
+
+```bash
+docker run --rm \
+  -e API_HOST=api.example -e DASHBOARD_HOST=dashboard.example -e CADDY_TLS=internal \
+  -v "$(pwd)/caddy/Caddyfile:/etc/caddy/Caddyfile:ro" \
+  caddy:2.8-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+```
+
+Expect `Valid configuration`. Whenever you edit this file on a running stack, validate the same way and then `docker compose -f docker-compose.yml -f docker-compose.prod.yml restart caddy` to load it.
 
 ### 3. Generate `.env` with hex-only passwords
 
