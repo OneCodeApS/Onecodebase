@@ -22,9 +22,12 @@ async function requireAdmin() {
   return s;
 }
 
-// Roles the admin UI is allowed to assign. 'admin' is intentionally excluded —
-// admins are bootstrapped via the CLI (npm run create-admin) only.
-const ASSIGNABLE_ROLES = ["read_write", "read_only"] as const;
+// Roles the admin UI is allowed to assign. 'admin' is included so an existing
+// admin can grant admin to other operators (via the create form or the
+// promoteToAdmin action below). The CLI (npm run create-admin) remains the
+// bootstrap path for the very first admin. Every entry point here is behind
+// requireAdmin(), so only admins can hand out admin.
+const ASSIGNABLE_ROLES = ["admin", "read_write", "read_only"] as const;
 type AssignableRole = (typeof ASSIGNABLE_ROLES)[number];
 
 export async function createUser(formData: FormData) {
@@ -116,4 +119,41 @@ export async function enableUser(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   if (id) await setDisabledAt(id, false, session);
   redirect("/admin/users");
+}
+
+// Promote an existing operator to admin. Admin-gated like the rest. The
+// `role <> 'admin'` guard makes this a no-op (rowCount 0) if the target is
+// already an admin or the id is unknown; the audit row records either outcome.
+export async function promoteToAdmin(formData: FormData) {
+  const session = await requireAdmin();
+  const ip = await clientIp();
+  const id = String(formData.get("id") ?? "");
+  if (!id) redirect("/admin/users");
+
+  const r = await pool().query<{ email: string }>(
+    `UPDATE _dashboard.users
+        SET role = 'admin',
+            updated_at = now()
+      WHERE id = $1 AND role <> 'admin'
+      RETURNING email`,
+    [id],
+  );
+  const target = r.rows[0]?.email ?? id;
+  await audit({
+    actor: session.email!,
+    actorId: session.userId!,
+    role: "admin",
+    action: "user.promote",
+    target,
+    success: r.rowCount === 1,
+    ip,
+    sessionId: session.sessionId ?? null,
+    metadata: { role: "admin" },
+  });
+
+  redirect(
+    r.rowCount === 1
+      ? "/admin/users?ok=" + encodeURIComponent(`${target} is now an admin`)
+      : "/admin/users",
+  );
 }

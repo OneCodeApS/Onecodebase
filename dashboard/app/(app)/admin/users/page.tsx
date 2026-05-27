@@ -2,7 +2,7 @@ import Link from "next/link";
 import { pool } from "@/lib/db";
 import type { UserRole } from "@/lib/session";
 import { Card } from "../../_components/Card";
-import { createUser, disableUser, enableUser } from "./actions";
+import { createUser, disableUser, enableUser, promoteToAdmin } from "./actions";
 
 type Row = {
   id: string;
@@ -48,7 +48,8 @@ export default async function UsersPage({
         <h2 className="text-lg font-medium">Create user</h2>
         <p className="mt-1 text-sm text-neutral-500">
           Read-only users can view data only. Read/write users can also modify it.
-          Neither can manage other users — admins are bootstrapped via the CLI.
+          Admins can additionally manage users and settings. The CLI
+          (npm run create-admin) remains available to bootstrap the first admin.
         </p>
         <form action={createUser} className="mt-3 flex flex-col gap-2 sm:flex-row">
           <input
@@ -74,6 +75,7 @@ export default async function UsersPage({
           >
             <option value="read_only">Read only</option>
             <option value="read_write">Read / write</option>
+            <option value="admin">Admin</option>
           </select>
           <button
             type="submit"
@@ -116,18 +118,34 @@ export default async function UsersPage({
                 </td>
                 <td className="py-2 pr-5">
                   {u.role !== "admin" && (
-                    <form
-                      action={u.disabled_at ? enableUser : disableUser}
-                      className="inline"
-                    >
-                      <input type="hidden" name="id" value={u.id} />
-                      <button
-                        type="submit"
-                        className="text-xs text-neutral-400 underline hover:text-neutral-100"
+                    <div className="flex items-center gap-3">
+                      {/* Only promote active users — an admin can't be
+                          re-enabled from the UI, so promoting a disabled one
+                          would strand it as an unmanageable disabled admin. */}
+                      {!u.disabled_at && (
+                        <form action={promoteToAdmin} className="inline">
+                          <input type="hidden" name="id" value={u.id} />
+                          <button
+                            type="submit"
+                            className="text-xs text-neutral-400 underline hover:text-neutral-100"
+                          >
+                            Make admin
+                          </button>
+                        </form>
+                      )}
+                      <form
+                        action={u.disabled_at ? enableUser : disableUser}
+                        className="inline"
                       >
-                        {u.disabled_at ? "Enable" : "Disable"}
-                      </button>
-                    </form>
+                        <input type="hidden" name="id" value={u.id} />
+                        <button
+                          type="submit"
+                          className="text-xs text-neutral-400 underline hover:text-neutral-100"
+                        >
+                          {u.disabled_at ? "Enable" : "Disable"}
+                        </button>
+                      </form>
+                    </div>
                   )}
                 </td>
               </tr>
