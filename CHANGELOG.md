@@ -8,6 +8,12 @@ While the project is on `0.x`, minor version bumps (`0.1 → 0.2`) may include b
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-05-27
+
+### Added
+
+Admin Role can now be given to dashboard users
+
 ## [1.3.0] - 2026-05-26
 
 Public APIs consolidated under a single `api.*` host, end-user auth gets CORS, storage moves out from under its own subdomain to `api.*/storage/v1/object/*` (Caddy strips the prefix and forwards directly to MinIO — no Node in the byte path, so large videos and Range requests scale with MinIO bandwidth). Operator console gains the version chip, system-schema toggle in the tables browser, and reusable Loader / RefreshButton components.
@@ -153,7 +159,8 @@ First milestone. Auth + reverse proxy + sample API working end-to-end. No dashbo
 - Session cookies are encrypted with `SESSION_SECRET` (≥32 chars enforced at module load).
 - Server actions on `/login` enforce same-origin posts (Next.js built-in).
 
-[Unreleased]: https://github.com/OneCodeApS/Onecodebase/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/OneCodeApS/Onecodebase/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/OneCodeApS/Onecodebase/releases/tag/v1.3.1
 [1.3.0]: https://github.com/OneCodeApS/Onecodebase/releases/tag/v1.3.0
 [1.2.0]: https://github.com/OneCodeApS/Onecodebase/releases/tag/v1.2.0
 [1.1.0]: https://github.com/OneCodeApS/Onecodebase/releases/tag/v1.1.0
