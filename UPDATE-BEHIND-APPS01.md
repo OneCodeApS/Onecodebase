@@ -32,6 +32,53 @@ git checkout master
 git update-index --skip-worktree caddy/Caddyfile
 ```
 
+> `skip-worktree` only helps while upstream leaves `caddy/Caddyfile` alone. The moment a release **changes** it (the v1.3.0 storage-routing rework did), the next `git pull` aborts — see [When an upgrade changes the bundled Caddyfile](#when-an-upgrade-changes-the-bundled-caddyfile).
+
+---
+
+## When an upgrade changes the bundled Caddyfile
+
+Most upgrades don't touch `caddy/Caddyfile`, so `skip-worktree` quietly keeps your local HTTP-only copy and the pull just works. But when a release **does** change it, the pull aborts:
+
+```
+error: Your local changes to the following files would be overwritten by merge:
+        caddy/Caddyfile
+Aborting
+```
+
+The tell-tale trio that this is a `skip-worktree` conflict (not an ordinary modified-file conflict): the pull aborts on `caddy/Caddyfile`, yet `git diff -- caddy/Caddyfile` prints **nothing** and `git checkout -- caddy/Caddyfile` says `pathspec ... did not match any file(s) known to git`. Confirm it:
+
+```bash
+git ls-files -v caddy/Caddyfile   # a leading "S" means skip-worktree is set
+```
+
+Resolve it by un-hiding the file, taking the upstream change, then re-applying your HTTP-only patch:
+
+```bash
+# 1. Let git manage the file again
+git update-index --no-skip-worktree caddy/Caddyfile
+
+# 2. Inspect your local patch (now visible) — confirm it's only the http:// +
+#    dropped-tls edits, nothing custom you'd lose
+git diff -- caddy/Caddyfile
+
+# 3. Discard it (you regenerate deterministically) and pull
+git checkout -- caddy/Caddyfile
+git pull --ff-only
+
+# 4. Re-derive the HTTP-only Caddyfile for the NEW routing by copying the block
+#    in DEPLOY-BEHIND-APPS01.md step 2 (it tracks the current bundled routes),
+#    then re-hide the file from future pulls
+git update-index --skip-worktree caddy/Caddyfile
+```
+
+Then run the upgrade as normal. **After deploying, restart Caddy explicitly** — `scripts/deploy.sh` runs `up -d --no-deps dashboard`, which never touches Caddy, so the new routing won't load until you do:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml restart caddy
+docker compose -f docker-compose.yml -f docker-compose.prod.yml ps caddy   # want "Up", not "Restarting"
+```
+
 ---
 
 ## Patch / minor upgrade
@@ -44,7 +91,7 @@ Use this path when the CHANGELOG entry has **no Database section and no new requ
 
 What the script does:
 
-1. `git pull --ff-only` — pulls updated compose / Caddy / init files (your `Caddyfile` is left alone thanks to `skip-worktree`).
+1. `git pull --ff-only` — pulls updated compose / Caddy / init files (your `Caddyfile` is left alone thanks to `skip-worktree`, *unless this release changed it* — then the pull aborts; see [When an upgrade changes the bundled Caddyfile](#when-an-upgrade-changes-the-bundled-caddyfile)).
 2. Pins `DASHBOARD_IMAGE_TAG=1.2.3` in `.env`.
 3. Pulls `ghcr.io/onecodeaps/onecodebase-dashboard:1.2.3` from GHCR.
 4. Recreates **only** the dashboard container (`--no-deps`) and waits until it's healthy (`--wait`).
@@ -79,6 +126,8 @@ git pull origin master --ff-only
 ```
 
 This brings in the new migration files under `postgres/migrations/` and any updated `docker-compose.yml`.
+
+> If this aborts complaining about `caddy/Caddyfile`, you've hit the `skip-worktree` conflict — resolve it per [When an upgrade changes the bundled Caddyfile](#when-an-upgrade-changes-the-bundled-caddyfile), then continue here.
 
 ### 3. Add new env vars
 
