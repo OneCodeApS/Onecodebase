@@ -8,6 +8,16 @@ While the project is on `0.x`, minor version bumps (`0.1 → 0.2`) may include b
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-05-27
+
+### Added
+
+- **Component versions page** — Settings → Versions (`/admin/system`). Reads the live versions of the running stack at page load: Dashboard / Next.js / React / Node.js (from the dashboard process), PostgreSQL (`version()`), PgBouncer (admin-console `SHOW VERSION`, using the existing `dashboard_admin` credentials it already has admin/stats rights for), PostgREST (its `Server` header via `POSTGREST_INTERNAL_URL`, default `http://postgrest:3000`), and MinIO (SigV4 admin-info call with the existing root credentials). Detection is best-effort and fault-isolated — a down or unreachable service shows `unavailable` rather than breaking the page. Caddy is listed as not runtime-detectable (it hides its version and its admin API is container-local). Admin-gated like the other `/admin/*` pages.
+
+### Changed
+
+- **PostgreSQL upgraded to 18** (`postgres:18-alpine`) — for the native `uuidv7()` function. **New tables now default their primary key to `uuidv7()`** instead of `bigserial`/`gen_random_uuid()`: a time-ordered UUID that keeps UUIDs' unguessable / globally-unique properties while indexing far better than random `uuidv4`. The sample `public.todos` table demonstrates the convention (`id uuid PRIMARY KEY DEFAULT uuidv7()`); existing tables (`auth.*`, `_dashboard.*`) are unchanged. **Upgrade note:** `deploy.sh` only recreates the dashboard (`--no-deps`), so it never changes the running Postgres — existing installs keep their current major until an operator deliberately recreates the `postgres` service. A data volume initialised by an older major won't start under a newer one (Postgres refuses an incompatible data dir rather than harming the data), so a major upgrade needs a dump/restore or `pg_upgrade`; fresh installs initialise cleanly.
+
 ## [1.3.2] - 2026-05-27
 
 CORS allowed-origins are now managed from the dashboard instead of only the `AUTH_ALLOWED_ORIGINS` env var.
