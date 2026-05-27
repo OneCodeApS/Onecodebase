@@ -45,6 +45,7 @@ const GROUPS: NavGroup[] = [
     heading: "Authentication",
     items: [
       { href: "/admin/auth-providers", label: "Auth providers", match: "/admin/auth-providers", adminOnly: true },
+      { href: "/admin/cors", label: "CORS origins", match: "/admin/cors", adminOnly: true },
       { href: "/admin/api-keys", label: "API keys", match: "/admin/api-keys", adminOnly: true },
       { href: "/admin/end-users", label: "End users", match: "/admin/end-users", adminOnly: true },
       { href: "/admin/users", label: "Dashboard users", match: "/admin/users", adminOnly: true },
