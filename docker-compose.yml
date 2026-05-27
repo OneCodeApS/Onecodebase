@@ -19,6 +19,13 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-postgres}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      # Postgres 18+ defaults PGDATA to a version-specific path
+      # (/var/lib/postgresql/<major>/docker) and moved the image's VOLUME to
+      # /var/lib/postgresql. We pin the classic location so the data dir always
+      # sits exactly at the volume mount below, unchanged across majors — which
+      # keeps the mount and the dump/restore upgrade tooling
+      # (scripts/pg-major-upgrade.sh) simple and version-independent.
+      PGDATA: /var/lib/postgresql/data
       # Forwarded so init scripts can interpolate them.
       AUTHENTICATOR_PASSWORD: ${AUTHENTICATOR_PASSWORD:?AUTHENTICATOR_PASSWORD must be set}
       DASHBOARD_ADMIN_PASSWORD: ${DASHBOARD_ADMIN_PASSWORD:?DASHBOARD_ADMIN_PASSWORD must be set}

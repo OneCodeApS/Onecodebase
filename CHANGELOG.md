@@ -10,13 +10,24 @@ While the project is on `0.x`, minor version bumps (`0.1 → 0.2`) may include b
 
 ## [1.3.3] - 2026-05-27
 
+**Upgrading from 1.3.2:** this release moves the bundled database from Postgres 16 to 18, so existing installs need a one-time Postgres major upgrade alongside the usual dashboard deploy:
+
+```bash
+git pull --ff-only             # pulls the new compose (postgres:18-alpine + PGDATA pin)
+./scripts/pg-major-upgrade.sh  # migrates the DB 16 → 18 (backs up first; prompts before destructive steps)
+./scripts/deploy.sh 1.3.3      # deploys the 1.3.3 dashboard image
+```
+
+Fresh installs get Postgres 18 automatically and skip the middle step. The dashboard runs against either major — the major upgrade is what makes the native `uuidv7()` default usable.
+
 ### Added
 
 - **Component versions page** — Settings → Versions (`/admin/system`). Reads the live versions of the running stack at page load: Dashboard / Next.js / React / Node.js (from the dashboard process), PostgreSQL (`version()`), PgBouncer (admin-console `SHOW VERSION`, using the existing `dashboard_admin` credentials it already has admin/stats rights for), PostgREST (its `Server` header via `POSTGREST_INTERNAL_URL`, default `http://postgrest:3000`), and MinIO (SigV4 admin-info call with the existing root credentials). Detection is best-effort and fault-isolated — a down or unreachable service shows `unavailable` rather than breaking the page. Caddy is listed as not runtime-detectable (it hides its version and its admin API is container-local). Admin-gated like the other `/admin/*` pages.
+- **Database backup & major-upgrade scripts** — `scripts/pg-backup.sh` dumps the whole cluster (all databases + roles) to a gzipped file under `./backups/`, and `scripts/pg-major-upgrade.sh` performs a safe dump-&-restore Postgres major upgrade with the stock image (back up → fresh cluster on the new major → restore in a throwaway container so the bundled `init/` scripts don't double-seed). Documented under [Upgrading PostgreSQL (major version)](DEPLOYMENT.md#upgrading-postgresql-major-version).
 
 ### Changed
 
-- **PostgreSQL upgraded to 18** (`postgres:18-alpine`) — for the native `uuidv7()` function. **New tables now default their primary key to `uuidv7()`** instead of `bigserial`/`gen_random_uuid()`: a time-ordered UUID that keeps UUIDs' unguessable / globally-unique properties while indexing far better than random `uuidv4`. The sample `public.todos` table demonstrates the convention (`id uuid PRIMARY KEY DEFAULT uuidv7()`); existing tables (`auth.*`, `_dashboard.*`) are unchanged. **Upgrade note:** `deploy.sh` only recreates the dashboard (`--no-deps`), so it never changes the running Postgres — existing installs keep their current major until an operator deliberately recreates the `postgres` service. A data volume initialised by an older major won't start under a newer one (Postgres refuses an incompatible data dir rather than harming the data), so a major upgrade needs a dump/restore or `pg_upgrade`; fresh installs initialise cleanly.
+- **PostgreSQL upgraded to 18** (`postgres:18-alpine`) — for the native `uuidv7()` function. **New tables now default their primary key to `uuidv7()`** instead of `bigserial`/`gen_random_uuid()`: a time-ordered UUID that keeps UUIDs' unguessable / globally-unique properties while indexing far better than random `uuidv4`. The sample `public.todos` table demonstrates the convention (`id uuid PRIMARY KEY DEFAULT uuidv7()`); existing tables (`auth.*`, `_dashboard.*`) are unchanged. **Upgrade note:** `deploy.sh` only recreates the dashboard (`--no-deps`), so it never changes the running Postgres — existing installs keep their current major until an operator deliberately recreates the `postgres` service. A data volume initialised by an older major won't start under a newer one (Postgres refuses an incompatible data dir rather than harming the data), so a major upgrade needs a dump/restore (use `scripts/pg-major-upgrade.sh`); fresh installs initialise cleanly. The compose file also pins `PGDATA=/var/lib/postgresql/data`, because Postgres 18+ otherwise moves the data dir to a version-specific path (`/var/lib/postgresql/<major>/docker`) — pinning it keeps the data at the existing volume mount.
 
 ## [1.3.2] - 2026-05-27
 

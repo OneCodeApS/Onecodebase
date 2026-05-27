@@ -6,6 +6,8 @@ Step-by-step instructions for installing Onecodebase on a Linux server and keepi
 
 - [First-time install](#first-time-install)
 - [Updating to a new version](#updating-to-a-new-version)
+- [Backing up the database](#backing-up-the-database)
+- [Upgrading PostgreSQL (major version)](#upgrading-postgresql-major-version)
 - [Rolling back to a previous version](#rolling-back-to-a-previous-version)
 - [Troubleshooting](#troubleshooting)
 
@@ -298,6 +300,91 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
 The dashboard line should read `Up X seconds (healthy)`.
 
 Open the dashboard in your browser and sign in. Your existing admin credentials still work; the data volume is preserved.
+
+---
+
+## Backing up the database
+
+Take a full backup before any risky operation — especially a Postgres major upgrade. `scripts/pg-backup.sh` dumps the **entire cluster** (every database plus all roles and their passwords) to a gzipped file:
+
+```bash
+cd /opt/onecodebase
+./scripts/pg-backup.sh
+# → ./backups/onecodebase-pg18-20260527-141230.sql.gz
+```
+
+- Dumps land in `./backups/` (git-ignored). Pass a directory to write elsewhere: `./scripts/pg-backup.sh /mnt/backups`.
+- The filename records the Postgres major (`pg18`) so it's obvious what a dump can restore into.
+- The `postgres` service must be running. Copy the dump off the server (laptop, S3, …) for anything you can't afford to lose.
+
+**Restoring** a dump into a running cluster:
+
+```bash
+gunzip -c backups/onecodebase-pg18-*.sql.gz \
+  | docker compose -f docker-compose.yml exec -T postgres psql -U postgres -d postgres
+```
+
+> Restoring into a cluster that already has the schema will produce "already exists" errors. Restore into a **fresh** cluster (the upgrade script below does exactly that), or restore a single table with a targeted `pg_dump` instead.
+
+---
+
+## Upgrading PostgreSQL (major version)
+
+Postgres major upgrades (e.g. **18 → 19**) are deliberately a separate, manual step — they never happen during a normal `deploy.sh` run:
+
+- `deploy.sh` only recreates the **dashboard** container (`up -d --no-deps dashboard`); it never touches Postgres.
+- The official `postgres` image **refuses to start** on a data directory created by a different major (it logs `database files are incompatible with server` and exits). This protects your data — nothing is corrupted, the service just won't come up until you migrate.
+
+**Minor / patch upgrades** (e.g. `18.1 → 18.4`, same major) need none of this — the on-disk format is compatible. Just bump the tag and recreate the one service:
+
+```bash
+# edit docker-compose.yml → image: postgres:18.4-alpine
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d postgres
+```
+
+**Major upgrades** use `scripts/pg-major-upgrade.sh`, which does a safe dump & restore with the stock image (no extra tooling). It backs up first, recreates the data volume on the new major, and restores into it.
+
+### Step 1 — Read the release notes
+
+Skim the [PostgreSQL release notes](https://www.postgresql.org/docs/release/) for the target major. Don't jump several majors at once without checking each.
+
+### Step 2 — Bump the image tag
+
+Edit `docker-compose.yml`:
+
+```yaml
+  postgres:
+    image: postgres:19-alpine    # was postgres:18-alpine
+```
+
+> Leave the `PGDATA: /var/lib/postgresql/data` line in place — it pins the data directory to the mount path across majors, which is what keeps the upgrade tooling version-independent. (Postgres 18+ otherwise defaults `PGDATA` to a version-specific path.)
+
+### Step 3 — Run the upgrade script
+
+```bash
+cd /opt/onecodebase
+./scripts/pg-major-upgrade.sh
+```
+
+It will:
+
+1. Take a full backup (`pg-backup.sh`) into `./backups/`.
+2. Show the current vs target major and **wait for you to type `yes`** before anything destructive.
+3. Stop the stack, drop the old data volume, initialise a fresh cluster on the new major, and restore the backup into it (in a throwaway container, so the bundled `postgres/init/*` scripts don't double-seed). A few "already exists" notices for the bootstrap superuser are expected.
+4. Bring the whole stack back up with `--wait`.
+
+The stack is **down for the duration** (typically seconds to a few minutes depending on data size).
+
+### Step 4 — Verify
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec postgres psql -U postgres -c 'SELECT version();'
+docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
+```
+
+The version should report the new major and all services should be `Up` / `(healthy)`.
+
+> **If something goes wrong:** revert the tag in `docker-compose.yml` to the old major and restore the backup the script left in `./backups/` (see [Backing up the database](#backing-up-the-database)). The old image reads the old-major dump cleanly.
 
 ---
 

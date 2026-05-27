@@ -109,7 +109,13 @@ Use this path when the CHANGELOG mentions **new migrations, new required env var
 
 ### 1. Back up the database
 
-Migrations are non-destructive but always insure first:
+Migrations are non-destructive but always insure first. The easy way is the backup script (full cluster dump, gzipped, into `./backups/`):
+
+```bash
+./scripts/pg-backup.sh
+```
+
+Or do it by hand if you prefer a single-database plain dump:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.prod.yml exec postgres \
@@ -118,6 +124,8 @@ ls -lh ~/backup-before-<version>-*.sql   # confirm it's not 0 bytes
 ```
 
 Keep the dump somewhere outside the server too (your laptop, S3 bucket, etc.) before continuing.
+
+> This section upgrades the **Onecodebase app** version. Upgrading the **Postgres engine** itself across a major (e.g. 18 → 19) is a separate, deliberate operation — see [Upgrading PostgreSQL (major version)](DEPLOYMENT.md#upgrading-postgresql-major-version) and `scripts/pg-major-upgrade.sh`.
 
 ### 2. Pull the new config
 
