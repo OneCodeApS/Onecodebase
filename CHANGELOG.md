@@ -8,6 +8,18 @@ While the project is on `0.x`, minor version bumps (`0.1 → 0.2`) may include b
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-05-27
+
+CORS allowed-origins are now managed from the dashboard instead of only the `AUTH_ALLOWED_ORIGINS` env var.
+
+### Added
+
+- **CORS origins admin page** — Authentication → CORS origins. Add/remove the browser origins allowed to read responses from `/auth/v1/*` and the storage URL-issuance endpoints. Input is validated and canonicalized (via `URL.origin`, dropping any path/trailing slash; `*` is accepted for "any origin"), a `*` entry shows a warning, and every change writes an audit row (`settings.cors_origins.add` / `settings.cors_origins.remove`). Admin-gated like the other `/admin/*` pages.
+
+### Changed
+
+- **CORS allowlist is now database-backed** — `lib/cors.ts` reads the `auth_allowed_origins` setting (cached in-process for 30s, invalidated immediately on save) and falls back to the `AUTH_ALLOWED_ORIGINS` env var only until the list is first saved from the UI. After that the database is authoritative — even an empty list (explicit "allow nothing"); a DB error falls back to the env var rather than blocking requests. No migration: the setting row is created on first save, so existing env-configured installs keep working until then.
+
 ## [1.3.1] - 2026-05-27
 
 ### Added
@@ -159,7 +171,8 @@ First milestone. Auth + reverse proxy + sample API working end-to-end. No dashbo
 - Session cookies are encrypted with `SESSION_SECRET` (≥32 chars enforced at module load).
 - Server actions on `/login` enforce same-origin posts (Next.js built-in).
 
-[Unreleased]: https://github.com/OneCodeApS/Onecodebase/compare/v1.3.1...HEAD
+[Unreleased]: https://github.com/OneCodeApS/Onecodebase/compare/v1.3.2...HEAD
+[1.3.2]: https://github.com/OneCodeApS/Onecodebase/releases/tag/v1.3.2
 [1.3.1]: https://github.com/OneCodeApS/Onecodebase/releases/tag/v1.3.1
 [1.3.0]: https://github.com/OneCodeApS/Onecodebase/releases/tag/v1.3.0
 [1.2.0]: https://github.com/OneCodeApS/Onecodebase/releases/tag/v1.2.0
