@@ -19,6 +19,7 @@ CORS allowed-origins are now managed from the dashboard instead of only the `AUT
 ### Changed
 
 - **CORS allowlist is now database-backed** — `lib/cors.ts` reads the `auth_allowed_origins` setting (cached in-process for 30s, invalidated immediately on save) and falls back to the `AUTH_ALLOWED_ORIGINS` env var only until the list is first saved from the UI. After that the database is authoritative — even an empty list (explicit "allow nothing"); a DB error falls back to the env var rather than blocking requests. No migration: the setting row is created on first save, so existing env-configured installs keep working until then.
+- **Dashboard user roles are editable inline** — the Role column on the Dashboard users page is now a dropdown that saves on selection, replacing the 1.3.1 "Make admin" button. The backing `setUserRole` action refuses to demote the last admin or to change your own role (enforced server-side and reflected in the UI), and audits each change as `user.role_change` with `{ from, to }`.
 
 ## [1.3.1] - 2026-05-27
 
