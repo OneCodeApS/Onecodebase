@@ -41,7 +41,13 @@ function corsHeaders(allowOrigin: string, methods: readonly string[]): Headers {
   return h;
 }
 
-type Handler = (req: NextRequest) => Promise<Response> | Response;
+// Args captures any extra positional arguments Next.js passes after the
+// request — e.g. the `{ params }` context object for dynamic routes — so the
+// wrapper stays transparent to handlers that need them.
+type Handler<Args extends unknown[] = []> = (
+  req: NextRequest,
+  ...args: Args
+) => Promise<Response> | Response;
 
 type CorsOptions = {
   // HTTP verbs this route exposes. OPTIONS is added automatically.
@@ -53,10 +59,13 @@ type CorsOptions = {
 //      origin is in the allowlist.
 //   2. Lets non-browser callers (no Origin header) through untouched.
 // Pair with corsPreflight() to handle the OPTIONS preflight on the same route.
-export function withCors(handler: Handler, opts: CorsOptions): Handler {
-  return async (req) => {
+export function withCors<Args extends unknown[]>(
+  handler: Handler<Args>,
+  opts: CorsOptions,
+): Handler<Args> {
+  return async (req, ...args) => {
     const allow = resolveAllowOrigin(req.headers.get("origin"));
-    const res = await handler(req);
+    const res = await handler(req, ...args);
     if (allow) {
       const cors = corsHeaders(allow, [...opts.methods, "OPTIONS"]);
       cors.forEach((v, k) => res.headers.set(k, v));
