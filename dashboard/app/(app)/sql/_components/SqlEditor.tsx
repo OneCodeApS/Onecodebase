@@ -22,11 +22,12 @@ type SnippetGroup = {
   snippets: Snippet[];
 };
 
-// Snippets the user can click to load into the editor. Keep these short,
-// runnable as-is, and useful for poking at the system.
+// Snippets the user can click to load into the editor. The DDL / RLS entries
+// are best-practice templates for this stack — swap public.example for your
+// own table; the read-only inspection queries run as-is.
 const SNIPPETS: SnippetGroup[] = [
   {
-    heading: "Schema",
+    heading: "Inspect",
     snippets: [
       {
         label: "List tables",
@@ -68,67 +69,124 @@ const SNIPPETS: SnippetGroup[] = [
     ],
   },
   {
-    heading: "Sample data",
+    heading: "Create table",
     snippets: [
       {
-        label: "Show todos",
-        readOnly: true,
-        sql: "SELECT * FROM public.todos ORDER BY id;",
+        label: "Table with RLS (recommended)",
+        description: "uuidv7 key, timestamps, RLS on, API grants",
+        readOnly: false,
+        sql: `-- Recommended new-table pattern. uuidv7() is a time-ordered,
+-- unguessable primary key (Postgres 18+).
+CREATE TABLE public.example (
+  id         uuid PRIMARY KEY DEFAULT uuidv7(),
+  title      text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- Tables in the public schema are exposed by PostgREST. Enable RLS so rows
+-- stay locked down until a policy grants access.
+ALTER TABLE public.example ENABLE ROW LEVEL SECURITY;
+
+-- PostgREST connects as anon (no token) or authenticated (valid JWT). Grant
+-- the privileges the API role needs, then scope the rows with policies.
+GRANT SELECT ON public.example TO anon, authenticated;
+GRANT INSERT, UPDATE, DELETE ON public.example TO authenticated;`,
       },
       {
-        label: "Insert a todo",
+        label: "Keep updated_at current",
+        description: "Trigger that bumps updated_at on every UPDATE",
         readOnly: false,
-        sql:
-          "INSERT INTO public.todos (title)\n" +
-          "VALUES ('Try the SQL editor')\n" +
-          "RETURNING *;",
+        sql: `CREATE OR REPLACE FUNCTION public.set_updated_at()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.updated_at := now();
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER example_set_updated_at
+  BEFORE UPDATE ON public.example
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();`,
       },
       {
-        label: "Mark all done",
+        label: "Foreign key + index",
+        description: "Reference another table and index the key",
         readOnly: false,
-        sql: "UPDATE public.todos SET done = true RETURNING id, title, done;",
-      },
-      {
-        label: "Delete completed",
-        description: "Removes every row where done = true",
-        readOnly: false,
-        sql:
-          "DELETE FROM public.todos\n" +
-          "WHERE done = true\n" +
-          "RETURNING id, title;",
+        sql: `-- ON DELETE CASCADE removes children when the parent is deleted.
+ALTER TABLE public.example
+  ADD COLUMN owner_id uuid NOT NULL
+    REFERENCES auth.users (id) ON DELETE CASCADE;
+
+-- Always index a foreign key you filter or join on.
+CREATE INDEX example_owner_id_idx ON public.example (owner_id);`,
       },
     ],
   },
   {
-    heading: "Schema management",
+    heading: "Row-level security",
     snippets: [
       {
-        label: "Create a table",
-        description: "Example notes table with common column types",
+        label: "Enable RLS",
         readOnly: false,
-        sql:
-          "CREATE TABLE public.notes (\n" +
-          "  id         bigserial PRIMARY KEY,\n" +
-          "  title      text NOT NULL,\n" +
-          "  body       text,\n" +
-          "  created_at timestamptz NOT NULL DEFAULT now()\n" +
-          ");",
+        sql: "ALTER TABLE public.example ENABLE ROW LEVEL SECURITY;",
       },
       {
-        label: "Add a column",
+        label: "Policy: public read",
+        description: "Anyone, even anonymous, can read every row",
         readOnly: false,
-        sql: "ALTER TABLE public.notes ADD COLUMN tag text;",
+        sql: `CREATE POLICY example_select_public
+  ON public.example
+  FOR SELECT
+  TO anon, authenticated
+  USING (true);`,
       },
       {
-        label: "Rename a column",
+        label: "Policy: authenticated insert",
+        description: "Only signed-in callers can insert",
         readOnly: false,
-        sql: "ALTER TABLE public.notes RENAME COLUMN tag TO label;",
+        sql: `CREATE POLICY example_insert_authenticated
+  ON public.example
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (true);`,
       },
       {
-        label: "Drop a table",
-        description: "Permanently removes the table and all its data",
+        label: "Policy: owner-only access",
+        description: "Each user reads/writes only their own rows (JWT sub)",
         readOnly: false,
-        sql: "DROP TABLE IF EXISTS public.notes;",
+        sql: `-- The JWT subject (sub) is the user id; PostgREST exposes the
+-- token's claims through the request.jwt.claims setting.
+CREATE POLICY example_owner_all
+  ON public.example
+  FOR ALL
+  TO authenticated
+  USING      (owner_id = (current_setting('request.jwt.claims', true)::json ->> 'sub')::uuid)
+  WITH CHECK (owner_id = (current_setting('request.jwt.claims', true)::json ->> 'sub')::uuid);`,
+      },
+    ],
+  },
+  {
+    heading: "Indexes & plans",
+    snippets: [
+      {
+        label: "Create index",
+        readOnly: false,
+        sql: "CREATE INDEX example_created_at_idx ON public.example (created_at);",
+      },
+      {
+        label: "Unique constraint",
+        readOnly: false,
+        sql: `ALTER TABLE public.example
+  ADD CONSTRAINT example_title_unique UNIQUE (title);`,
+      },
+      {
+        label: "Check a query plan",
+        description: "EXPLAIN shows index usage without running the query",
+        readOnly: true,
+        sql: `EXPLAIN
+SELECT * FROM public.example
+WHERE created_at > now() - interval '7 days';`,
       },
     ],
   },
@@ -344,6 +402,8 @@ export function SqlEditor({ role }: { role: UserRole }) {
             hidden input so the server action's FormData picks it up. */}
         <input type="hidden" name="sql" value={sqlText} />
         <div className="overflow-hidden rounded border border-neutral-700">
+          {/* Tall while composing; shrinks once a result is showing so the
+              output has room below. */}
           <CodeMirror
             value={sqlText}
             onChange={setSqlText}
@@ -361,7 +421,7 @@ export function SqlEditor({ role }: { role: UserRole }) {
                 ? "SELECT * FROM public.todos;\n\n(Ctrl+Enter to run — read-only users can run SELECT only)"
                 : "SELECT * FROM public.todos;\n\n(Ctrl+Enter to run)"
             }
-            height="240px"
+            height={result ? "260px" : "60vh"}
           />
         </div>
         <div className="mt-2 flex items-center justify-between">

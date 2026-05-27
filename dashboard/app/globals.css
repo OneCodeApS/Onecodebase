@@ -3,3 +3,40 @@
 button {
   cursor: pointer;
 }
+
+/* Themed scrollbars (vertical + horizontal) matching the dark neutral UI.
+   Reuses Tailwind's palette variables so they stay in sync with the design. */
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-neutral-700, #404040) transparent;
+}
+
+/* WebKit / Chromium */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  /* Transparent border + padding-box clip leaves a little breathing room
+     around the thumb so it reads as a slim pill rather than a solid bar. */
+  background-color: var(--color-neutral-700, #404040);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-neutral-600, #525252);
+}
+
+/* The square where the vertical and horizontal bars meet. */
+::-webkit-scrollbar-corner {
+  background: transparent;
+}

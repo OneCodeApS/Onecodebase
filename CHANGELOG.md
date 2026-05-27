@@ -8,6 +8,18 @@ While the project is on `0.x`, minor version bumps (`0.1 → 0.2`) may include b
 
 ## [Unreleased]
 
+## [1.3.4] - 2026-05-27
+
+### Added
+
+- **Table schema view** — the table browser (`/tables/<name>`) now has **Data** / **Schema** tabs (URL-driven, `?view=schema`). The Schema tab renders the columns as a copyable `CREATE TABLE` statement (with a Copy button), alongside **Indexes** (`pg_get_indexdef`) and **Constraints** (`pg_get_constraintdef`) listings. Metadata is read from `pg_catalog` with bound parameters; identifiers in the generated DDL go through `quoteIdent`.
+- **SQL editor best-practice snippets** — replaced the sample-data / CRUD example snippets with best-practice templates for this stack: an RLS-secured `uuidv7` table (with the `anon`/`authenticated` grants PostgREST needs), an `updated_at` trigger, a foreign key + index, RLS policies (public read / authenticated insert / owner-only via the JWT `sub` claim), and index / unique-constraint / `EXPLAIN` helpers. The read-only inspection queries are kept (the "Schema" group is renamed "Inspect").
+
+### Changed
+
+- **SQL editor sizing** — the editor is now tall (~60% of the viewport) while you compose and shrinks to a compact height once a result is on screen, leaving room for the output.
+- **Themed scrollbars** — vertical and horizontal scrollbars across the dashboard now match the dark neutral UI (slim neutral-700 thumb, transparent track) instead of the OS default.
+
 ## [1.3.3] - 2026-05-27
 
 **Upgrading from 1.3.2:** this release moves the bundled database from Postgres 16 to 18, so existing installs need a one-time Postgres major upgrade alongside the usual dashboard deploy:
