@@ -4,6 +4,7 @@ import { listCronJobs } from "@/lib/cron";
 import { listFunctions } from "@/lib/functions";
 import { removeCronJob } from "./actions";
 import { CronJobModal } from "./_components/CronJobModal";
+import { getSession } from "@/lib/session";
 
 function formatTime(d: Date | string | null): string {
   if (!d) return "—";
@@ -19,6 +20,8 @@ export default async function CronPage({
   const sp = await searchParams;
   const [jobs, functions] = await Promise.all([listCronJobs(), listFunctions()]);
   const functionNames = functions.map((f) => f.name);
+  const session = await getSession();
+  const isAdmin = session.role === "admin";
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-10">
@@ -30,17 +33,19 @@ export default async function CronPage({
             in-process — only one dashboard instance fires each job.
           </p>
         </div>
-        <CronJobModal
-          functions={functionNames}
-          trigger={
-            <button
-              type="button"
-              className="rounded border border-neutral-700 bg-neutral-800 px-3 py-1.5 text-sm hover:bg-neutral-700"
-            >
-              + New cron job
-            </button>
-          }
-        />
+        {isAdmin && (
+          <CronJobModal
+            functions={functionNames}
+            trigger={
+              <button
+                type="button"
+                className="rounded border border-neutral-700 bg-neutral-800 px-3 py-1.5 text-sm hover:bg-neutral-700"
+              >
+                + New cron job
+              </button>
+            }
+          />
+        )}
       </div>
 
       {sp.error && (
@@ -120,6 +125,7 @@ export default async function CronPage({
                     {formatTime(j.last_run_at)}
                   </td>
                   <td className="px-3 py-2">
+                    {isAdmin && (
                     <div className="flex justify-end gap-3">
                       <CronJobModal
                         functions={functionNames}
@@ -154,6 +160,7 @@ export default async function CronPage({
                         <input type="hidden" name="name" value={j.name} />
                       </ConfirmDeleteForm>
                     </div>
+                    )}
                   </td>
                 </tr>
               ))

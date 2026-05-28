@@ -5,6 +5,9 @@ import { ConfirmDeleteForm } from "../../../_components/ConfirmDeleteForm";
 import { getDbFunctionByOid } from "@/lib/db-introspect";
 import { deleteDbFunction } from "../actions";
 import { FunctionEditor } from "../_components/FunctionEditor";
+import { getSession } from "@/lib/session";
+
+const SYSTEM_SCHEMAS = new Set(["_dashboard", "auth"]);
 
 export default async function DbFunctionDetailPage({
   params,
@@ -17,6 +20,11 @@ export default async function DbFunctionDetailPage({
   const sp = await searchParams;
   const fn = await getDbFunctionByOid(oid);
   if (!fn) notFound();
+  const session = await getSession();
+  const isAdmin = session.role === "admin";
+  if (session.role === "read_only" && SYSTEM_SCHEMAS.has(fn.schema)) {
+    notFound();
+  }
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
@@ -39,23 +47,25 @@ export default async function DbFunctionDetailPage({
             ({fn.args || ""}) → {fn.returns}
           </p>
         </div>
-        <ConfirmDeleteForm
-          action={deleteDbFunction}
-          triggerLabel="Delete"
-          triggerClassName="rounded border border-red-900/50 px-3 py-1.5 text-sm text-red-300 hover:bg-red-950/40"
-          title="Delete function?"
-          message={
-            <>
-              Permanently drop{" "}
-              <span className="font-mono text-neutral-100">
-                {fn.schema}.{fn.name}({fn.args || ""})
-              </span>
-              ? Anything depending on it will fail unless dropped too.
-            </>
-          }
-        >
-          <input type="hidden" name="oid" value={fn.oid} />
-        </ConfirmDeleteForm>
+        {isAdmin && (
+          <ConfirmDeleteForm
+            action={deleteDbFunction}
+            triggerLabel="Delete"
+            triggerClassName="rounded border border-red-900/50 px-3 py-1.5 text-sm text-red-300 hover:bg-red-950/40"
+            title="Delete function?"
+            message={
+              <>
+                Permanently drop{" "}
+                <span className="font-mono text-neutral-100">
+                  {fn.schema}.{fn.name}({fn.args || ""})
+                </span>
+                ? Anything depending on it will fail unless dropped too.
+              </>
+            }
+          >
+            <input type="hidden" name="oid" value={fn.oid} />
+          </ConfirmDeleteForm>
+        )}
       </div>
 
       {sp.error && (
@@ -106,14 +116,20 @@ export default async function DbFunctionDetailPage({
 
       <div className="mt-6">
         <h2 className="text-sm font-medium text-neutral-300">Definition</h2>
-        <p className="mt-1 text-xs text-neutral-500">
-          Edit the full <span className="font-mono">CREATE OR REPLACE</span>{" "}
-          statement. Changing the signature creates a new overload rather than
-          replacing the existing one — delete the old version separately if you
-          want to remove it.
-        </p>
+        {isAdmin && (
+          <p className="mt-1 text-xs text-neutral-500">
+            Edit the full <span className="font-mono">CREATE OR REPLACE</span>{" "}
+            statement. Changing the signature creates a new overload rather than
+            replacing the existing one — delete the old version separately if you
+            want to remove it.
+          </p>
+        )}
         <div className="mt-3">
-          <FunctionEditor oid={fn.oid} initialDefinition={fn.definition} />
+          <FunctionEditor
+            oid={fn.oid}
+            initialDefinition={fn.definition}
+            readOnly={!isAdmin}
+          />
         </div>
       </div>
     </main>

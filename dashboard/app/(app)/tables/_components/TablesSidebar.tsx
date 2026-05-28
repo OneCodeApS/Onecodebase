@@ -21,7 +21,13 @@ const SYSTEM_SCHEMAS = new Set(["_dashboard", "auth"]);
 
 const SHOW_SYSTEM_KEY = "tables.showSystemSchemas";
 
-export function TablesSidebar({ tables }: { tables: TableEntry[] }) {
+export function TablesSidebar({
+  tables,
+  canViewSystemSchemas,
+}: {
+  tables: TableEntry[];
+  canViewSystemSchemas: boolean;
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -30,11 +36,14 @@ export function TablesSidebar({ tables }: { tables: TableEntry[] }) {
 
   // Restore the toggle from localStorage on mount. Kept off the first paint to
   // avoid an SSR/CSR mismatch — the picker just renders without system schemas
-  // for one frame, then re-renders if the user had it on.
+  // for one frame, then re-renders if the user had it on. read_only users
+  // can't see system schemas at all (filtered server-side too), so the
+  // restored value is ignored for them.
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (!canViewSystemSchemas) return;
     setShowSystem(window.localStorage.getItem(SHOW_SYSTEM_KEY) === "1");
-  }, []);
+  }, [canViewSystemSchemas]);
 
   function toggleSystem(next: boolean) {
     setShowSystem(next);
@@ -117,15 +126,17 @@ export function TablesSidebar({ tables }: { tables: TableEntry[] }) {
           )}
         </select>
 
-        <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-neutral-400 hover:text-neutral-200">
-          <input
-            type="checkbox"
-            checked={showSystem}
-            onChange={(e) => toggleSystem(e.target.checked)}
-            className="h-3 w-3 cursor-pointer accent-neutral-500"
-          />
-          Show system schemas
-        </label>
+        {canViewSystemSchemas && (
+          <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-neutral-400 hover:text-neutral-200">
+            <input
+              type="checkbox"
+              checked={showSystem}
+              onChange={(e) => toggleSystem(e.target.checked)}
+              className="h-3 w-3 cursor-pointer accent-neutral-500"
+            />
+            Show system schemas
+          </label>
+        )}
 
         {activeIsSystem && (
           <div

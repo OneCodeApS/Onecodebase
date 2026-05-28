@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Card } from "../../_components/Card";
 import { listFunctions } from "@/lib/functions";
 import { NewFunctionModal } from "./_components/NewFunctionModal";
+import { getSession } from "@/lib/session";
 
 export default async function FunctionsPage({
   searchParams,
@@ -10,6 +11,8 @@ export default async function FunctionsPage({
 }) {
   const sp = await searchParams;
   const functions = await listFunctions();
+  const session = await getSession();
+  const isAdmin = session.role === "admin";
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
@@ -21,7 +24,7 @@ export default async function FunctionsPage({
             <span className="font-mono">/functions/v1/&lt;name&gt;</span>.
           </p>
         </div>
-        <NewFunctionModal />
+        {isAdmin && <NewFunctionModal />}
       </div>
 
       {sp.error && (

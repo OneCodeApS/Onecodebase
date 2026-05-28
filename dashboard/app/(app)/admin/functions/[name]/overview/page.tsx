@@ -3,6 +3,7 @@ import { Card } from "../../../../_components/Card";
 import { ConfirmDeleteForm } from "../../../../_components/ConfirmDeleteForm";
 import { FUNCTION_NAME, getFunction } from "@/lib/functions";
 import { removeFunction, saveOverview } from "../../actions";
+import { getSession } from "@/lib/session";
 
 export default async function OverviewPage({
   params,
@@ -17,6 +18,8 @@ export default async function OverviewPage({
   if (!FUNCTION_NAME.test(name)) notFound();
   const fn = await getFunction(name);
   if (!fn) notFound();
+  const session = await getSession();
+  const isAdmin = session.role === "admin";
 
   const updated =
     fn.updated_at instanceof Date ? fn.updated_at : new Date(fn.updated_at);
@@ -36,6 +39,7 @@ export default async function OverviewPage({
         </p>
       )}
 
+      {isAdmin ? (
       <Card padded>
         <h2 className="text-lg font-medium">Settings</h2>
         <form action={saveOverview} className="mt-4 space-y-4">
@@ -132,6 +136,21 @@ export default async function OverviewPage({
           </div>
         </form>
       </Card>
+      ) : (
+      <Card padded>
+        <h2 className="text-lg font-medium">Settings</h2>
+        <dl className="mt-4 grid grid-cols-2 gap-2 text-sm">
+          <dt className="text-neutral-500">Enabled</dt>
+          <dd className="font-mono text-neutral-200">{fn.enabled ? "yes" : "no"}</dd>
+          <dt className="text-neutral-500">Verify JWT</dt>
+          <dd className="font-mono text-neutral-200">{fn.verify_jwt ? "yes" : "no"}</dd>
+          <dt className="text-neutral-500">Description</dt>
+          <dd className="text-neutral-300">{fn.description || "—"}</dd>
+          <dt className="text-neutral-500">Timeout</dt>
+          <dd className="font-mono text-neutral-200">{fn.timeout_ms}ms</dd>
+        </dl>
+      </Card>
+      )}
 
       <Card padded>
         <h2 className="text-lg font-medium">Metadata</h2>
@@ -149,6 +168,7 @@ export default async function OverviewPage({
         </dl>
       </Card>
 
+      {isAdmin && (
       <Card padded>
         <h2 className="text-lg font-medium text-red-300">Danger zone</h2>
         <p className="mt-1 text-sm text-neutral-500">
@@ -174,6 +194,7 @@ export default async function OverviewPage({
           </ConfirmDeleteForm>
         </div>
       </Card>
+      )}
     </div>
   );
 }

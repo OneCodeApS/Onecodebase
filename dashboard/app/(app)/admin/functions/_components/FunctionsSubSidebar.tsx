@@ -4,12 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const ITEMS = [
-  { href: "/admin/functions", label: "Edge functions", matchExact: false, exclude: ["/admin/functions/env"] },
-  { href: "/admin/functions/env", label: "Environment variables", matchExact: false, exclude: [] },
+  { href: "/admin/functions", label: "Edge functions", matchExact: false, exclude: ["/admin/functions/env"], adminOnly: false },
+  { href: "/admin/functions/env", label: "Environment variables", matchExact: false, exclude: [], adminOnly: true },
 ];
 
-export function FunctionsSubSidebar() {
+export function FunctionsSubSidebar({ isAdmin }: { isAdmin: boolean }) {
   const pathname = usePathname();
+  const items = ITEMS.filter((i) => !i.adminOnly || isAdmin);
 
   function isActive(item: (typeof ITEMS)[number]): boolean {
     for (const ex of item.exclude) {
@@ -26,7 +27,7 @@ export function FunctionsSubSidebar() {
         </div>
       </div>
       <nav className="flex-1 overflow-y-auto px-2 py-2">
-        {ITEMS.map((item) => {
+        {items.map((item) => {
           const active = isActive(item);
           return (
             <Link

@@ -359,15 +359,15 @@ The workflow at `.github/workflows/build.yml` is **manual-only**. Pushing to `ma
 1. Commit and push as usual (GitHub Desktop works fine). Nothing builds.
 2. When you want a new image on GHCR, go to repo → **Actions** → **Build & Release** → **Run workflow**.
 3. Pick a **Release type** from the dropdown:
-   - **none** — just rebuild the image. Publishes `:latest` + `:<short-sha>` to GHCR. No tag, no release.
-   - **patch / minor / major** — also cut a release. The workflow reads the latest existing tag, computes the next version, validates the matching `CHANGELOG.md` entry exists, builds `:X.Y.Z` + `:X.Y`, creates the git tag, and publishes a GitHub Release page.
+   - **rebuild** — just rebuild the image. Publishes `:latest` + `:<short-sha>` to GHCR. No tag, no release.
+   - **release** — also cut a release. The workflow reads the version from `dashboard/package.json`, validates the matching `CHANGELOG.md` entry exists, builds `:X.Y.Z` + `:X.Y`, creates the git tag, and publishes a GitHub Release page.
 
 **Cutting a release**
 
-1. Move the `[Unreleased]` entries in `CHANGELOG.md` into a new section with the version you expect (e.g., `[0.2.0]` for a minor bump from `0.1.0`). Commit, push.
-2. Actions → Build & Release → Run workflow → pick `patch` / `minor` / `major` → Run.
+1. Bump the version in `dashboard/package.json` (e.g., `1.3.5` → `1.3.6`). Move the `[Unreleased]` entries in `CHANGELOG.md` into a new `[<version>]` section matching it. Commit, push.
+2. Actions → Build & Release → Run workflow → pick `release` → Run.
 
-If the changelog entry for the computed version is missing, the workflow fails fast before building — a forgotten entry won't ship a half-baked release.
+The workflow fails fast if `dashboard/package.json`'s version isn't a valid `x.y.z`, the matching git tag already exists, or the changelog entry for the version is missing — a forgotten bump or missing notes won't ship a half-baked release.
 
 **Production deploy** — the production server lives behind a VPN, so CI never SSHes anywhere. After the release publishes, connect VPN, SSH to the server, and run `./scripts/deploy.sh 0.2.0` (the Actions run summary prints the exact command).
 

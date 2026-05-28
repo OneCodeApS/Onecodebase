@@ -9,6 +9,7 @@ import {
   type SchemaConstraint,
   type SchemaIndex,
 } from "../_components/SchemaPanel";
+import { getSession } from "@/lib/session";
 
 const PAGE_SIZE = 50;
 
@@ -212,6 +213,13 @@ export default async function TableRowsPage({
 
   if (!SAFE_IDENT.test(name)) notFound();
   if (!SAFE_IDENT.test(schema)) notFound();
+
+  // read_only users have no access to system schemas, even via direct URL.
+  // 404 (not 403) so the existence of the table isn't advertised.
+  const session = await getSession();
+  if (session.role === "read_only" && SYSTEM_SCHEMAS.has(schema)) {
+    notFound();
+  }
 
   const columns = await loadColumns(schema, name);
   if (columns.length === 0) notFound();

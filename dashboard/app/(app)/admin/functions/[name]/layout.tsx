@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { FUNCTION_NAME, getFunction } from "@/lib/functions";
 import { FunctionTabs } from "./_components/FunctionTabs";
+import { getSession } from "@/lib/session";
 
 export default async function FunctionDetailLayout({
   params,
@@ -15,6 +16,8 @@ export default async function FunctionDetailLayout({
   if (!FUNCTION_NAME.test(name)) notFound();
   const fn = await getFunction(name);
   if (!fn) notFound();
+  const session = await getSession();
+  const isAdmin = session.role === "admin";
 
   return (
     <main className="px-6 py-10">
@@ -41,7 +44,7 @@ export default async function FunctionDetailLayout({
       </p>
 
       <div className="mt-6">
-        <FunctionTabs name={name} />
+        <FunctionTabs name={name} isAdmin={isAdmin} />
       </div>
 
       <div className="mt-6">{children}</div>
