@@ -8,6 +8,22 @@ While the project is on `0.x`, minor version bumps (`0.1 → 0.2`) may include b
 
 ## [Unreleased]
 
+## [1.3.5] - 2026-05-28
+
+Non-admin operators get read-only access to several admin pages, and the tables browser / policies / DB functions hide system schemas from `read_only`.
+
+### Added
+
+- **Read-access for non-admin roles** — `read_write` and `read_only` can now view (but not edit) RLS policies, DB functions, edge functions (Overview / Invocations / Logs tabs only — Code stays admin-only), and Cron jobs. Pages render without their write controls: no "+ New", Edit, or Delete buttons; the function Overview's Settings form is replaced by a read-only summary and the Danger zone is hidden; `/admin/db-functions/<oid>` shows the function source in a read-only CodeMirror. Server actions still call `requireAdmin()` so a direct POST from a non-admin is rejected — the UI changes are cosmetic, the action gates are the security boundary.
+
+### Changed
+
+- **System schemas hidden from `read_only`** — the tables browser, RLS policies, and DB functions pages all filter `_dashboard` and `auth` out of their schema pickers for `read_only`, and reject direct URLs like `/tables/audit_log?schema=_dashboard` or `/admin/db-functions/<oid>` (when the function lives in a system schema) with `404`. The tables sidebar's "Show system schemas" toggle is hidden from `read_only`, and its localStorage value is ignored so a returning `read_only` on a shared machine can't bring system schemas back. `read_write` and `admin` are unchanged. The SQL editor remains the deliberate escape hatch — `read_only` can still `SELECT … FROM _dashboard.audit_log` from `/sql`.
+
+### Security
+
+- Middleware's `/admin/*` gate now uses an explicit allowlist (`isNonAdminReadable`) for non-admin readable subpaths. Admin-only routes — `/admin/functions/env`, `/admin/functions/<name>/code`, `/admin/db-functions/new`, `/admin/api-keys`, `/admin/audit`, `/admin/auth-providers`, `/admin/cors`, `/admin/end-users`, `/admin/realtime`, `/admin/system`, `/admin/users`, `/admin/settings` — still return `404` (not `403`) for non-admins, matching the existing convention. Subpath matching is conservative: `/admin/functions/env/foo` and `/admin/functions/<name>/code/anything` are both blocked.
+
 ## [1.3.4] - 2026-05-27
 
 ### Added
@@ -205,7 +221,8 @@ First milestone. Auth + reverse proxy + sample API working end-to-end. No dashbo
 - Session cookies are encrypted with `SESSION_SECRET` (≥32 chars enforced at module load).
 - Server actions on `/login` enforce same-origin posts (Next.js built-in).
 
-[Unreleased]: https://github.com/OneCodeApS/Onecodebase/compare/v1.3.2...HEAD
+[Unreleased]: https://github.com/OneCodeApS/Onecodebase/compare/v1.3.5...HEAD
+[1.3.5]: https://github.com/OneCodeApS/Onecodebase/releases/tag/v1.3.5
 [1.3.2]: https://github.com/OneCodeApS/Onecodebase/releases/tag/v1.3.2
 [1.3.1]: https://github.com/OneCodeApS/Onecodebase/releases/tag/v1.3.1
 [1.3.0]: https://github.com/OneCodeApS/Onecodebase/releases/tag/v1.3.0

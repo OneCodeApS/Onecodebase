@@ -12,12 +12,35 @@ import { saveDbFunction } from "../actions";
 export function FunctionEditor({
   oid,
   initialDefinition,
+  readOnly = false,
 }: {
   oid: string; // "new" for a fresh function
   initialDefinition: string;
+  readOnly?: boolean;
 }) {
   const formRef = useRef<HTMLFormElement | null>(null);
   const [definition, setDefinition] = useState(initialDefinition);
+
+  if (readOnly) {
+    return (
+      <div className="overflow-hidden rounded border border-neutral-700">
+        <CodeMirror
+          value={initialDefinition}
+          theme="dark"
+          extensions={[sql()]}
+          editable={false}
+          basicSetup={{
+            lineNumbers: true,
+            foldGutter: false,
+            highlightActiveLine: false,
+            highlightActiveLineGutter: false,
+            autocompletion: false,
+          }}
+          height="520px"
+        />
+      </div>
+    );
+  }
 
   const saveKeymap = Prec.highest(
     keymap.of([

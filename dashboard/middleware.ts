@@ -11,6 +11,38 @@ function isAdminPath(pathname: string): boolean {
   return pathname === "/admin" || pathname.startsWith("/admin/");
 }
 
+// Subset of /admin/* paths that signed-in non-admin users may view (read-only).
+// Server actions on these pages still require admin via requireAdmin() inside
+// the action — this only opens up the rendered pages, not the mutations.
+function isNonAdminReadable(pathname: string): boolean {
+  if (pathname === "/admin/policies") return true;
+  if (pathname === "/admin/cron") return true;
+
+  if (pathname === "/admin/db-functions") return true;
+  if (pathname.startsWith("/admin/db-functions/")) {
+    const tail = pathname.slice("/admin/db-functions/".length);
+    // The "create" form is admin-only; the per-oid detail page is readable.
+    if (tail === "new" || tail.startsWith("new/")) return false;
+    return true;
+  }
+
+  if (pathname === "/admin/functions") return true;
+  if (pathname.startsWith("/admin/functions/")) {
+    const tail = pathname.slice("/admin/functions/".length);
+    // /admin/functions/env (global env vars) is admin-only.
+    if (tail === "env" || tail.startsWith("env/")) return false;
+    // /admin/functions/<name>/code (source editor) is admin-only.
+    const slash = tail.indexOf("/");
+    if (slash !== -1) {
+      const sub = tail.slice(slash + 1);
+      if (sub === "code" || sub.startsWith("code/")) return false;
+    }
+    return true;
+  }
+
+  return false;
+}
+
 // End-user auth API — public, called by external apps with their own bearer
 // token (or no token, for sign-up / sign-in). Dashboard session is irrelevant
 // here.
@@ -60,7 +92,11 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (isAdminPath(pathname) && session.role !== "admin") {
+  if (
+    isAdminPath(pathname) &&
+    session.role !== "admin" &&
+    !isNonAdminReadable(pathname)
+  ) {
     return new NextResponse("Not Found", { status: 404 });
   }
 

@@ -7,6 +7,9 @@ import {
   listUserSchemas,
 } from "@/lib/db-introspect";
 import { deleteDbFunction } from "./actions";
+import { getSession } from "@/lib/session";
+
+const SYSTEM_SCHEMAS = new Set(["_dashboard", "auth"]);
 
 export default async function DbFunctionsPage({
   searchParams,
@@ -19,7 +22,13 @@ export default async function DbFunctionsPage({
   }>;
 }) {
   const sp = await searchParams;
-  const schemas = await listUserSchemas();
+  const session = await getSession();
+  const isAdmin = session.role === "admin";
+  const canViewSystemSchemas = session.role !== "read_only";
+  const allSchemas = await listUserSchemas();
+  const schemas = canViewSystemSchemas
+    ? allSchemas
+    : allSchemas.filter((s) => !SYSTEM_SCHEMAS.has(s));
   const selectedSchema =
     sp.schema && schemas.includes(sp.schema)
       ? sp.schema
@@ -47,12 +56,14 @@ export default async function DbFunctionsPage({
             , which run JavaScript in the dashboard process.
           </p>
         </div>
-        <Link
-          href="/admin/db-functions/new"
-          className="rounded border border-neutral-700 bg-neutral-800 px-3 py-1.5 text-sm hover:bg-neutral-700"
-        >
-          + New function
-        </Link>
+        {isAdmin && (
+          <Link
+            href="/admin/db-functions/new"
+            className="rounded border border-neutral-700 bg-neutral-800 px-3 py-1.5 text-sm hover:bg-neutral-700"
+          >
+            + New function
+          </Link>
+        )}
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -195,25 +206,27 @@ export default async function DbFunctionsPage({
                       >
                         Open
                       </Link>
-                      <ConfirmDeleteForm
-                        action={deleteDbFunction}
-                        triggerLabel="Delete"
-                        triggerClassName="text-xs text-red-400 underline hover:text-red-200"
-                        title="Delete function?"
-                        message={
-                          <>
-                            Permanently drop{" "}
-                            <span className="font-mono text-neutral-100">
-                              {f.schema}.{f.name}({f.args || ""})
-                            </span>
-                            ? Anything depending on it (views, other functions,
-                            policies referencing it) will fail unless dropped
-                            too.
-                          </>
-                        }
-                      >
-                        <input type="hidden" name="oid" value={f.oid} />
-                      </ConfirmDeleteForm>
+                      {isAdmin && (
+                        <ConfirmDeleteForm
+                          action={deleteDbFunction}
+                          triggerLabel="Delete"
+                          triggerClassName="text-xs text-red-400 underline hover:text-red-200"
+                          title="Delete function?"
+                          message={
+                            <>
+                              Permanently drop{" "}
+                              <span className="font-mono text-neutral-100">
+                                {f.schema}.{f.name}({f.args || ""})
+                              </span>
+                              ? Anything depending on it (views, other functions,
+                              policies referencing it) will fail unless dropped
+                              too.
+                            </>
+                          }
+                        >
+                          <input type="hidden" name="oid" value={f.oid} />
+                        </ConfirmDeleteForm>
+                      )}
                     </div>
                   </td>
                 </tr>

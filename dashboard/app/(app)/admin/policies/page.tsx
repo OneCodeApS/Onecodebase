@@ -10,6 +10,11 @@ import {
 } from "@/lib/db-introspect";
 import { deletePolicy, setTableRls } from "./actions";
 import { PolicyModal } from "./_components/PolicyModal";
+import { getSession } from "@/lib/session";
+
+// Same set used by the tables browser — kept consistent across pages so
+// read_only never sees these in any schema picker.
+const SYSTEM_SCHEMAS = new Set(["_dashboard", "auth"]);
 
 export default async function PoliciesPage({
   searchParams,
@@ -17,7 +22,13 @@ export default async function PoliciesPage({
   searchParams: Promise<{ schema?: string; ok?: string; error?: string }>;
 }) {
   const sp = await searchParams;
-  const schemas = await listUserSchemas();
+  const session = await getSession();
+  const isAdmin = session.role === "admin";
+  const canViewSystemSchemas = session.role !== "read_only";
+  const allSchemas = await listUserSchemas();
+  const schemas = canViewSystemSchemas
+    ? allSchemas
+    : allSchemas.filter((s) => !SYSTEM_SCHEMAS.has(s));
   const selectedSchema =
     sp.schema && schemas.includes(sp.schema)
       ? sp.schema
@@ -55,18 +66,20 @@ export default async function PoliciesPage({
             enforced when RLS is enabled on the underlying table.
           </p>
         </div>
-        <PolicyModal
-          tables={allTables}
-          roleOptions={roles}
-          trigger={
-            <button
-              type="button"
-              className="rounded border border-neutral-700 bg-neutral-800 px-3 py-1.5 text-sm hover:bg-neutral-700"
-            >
-              + New policy
-            </button>
-          }
-        />
+        {isAdmin && (
+          <PolicyModal
+            tables={allTables}
+            roleOptions={roles}
+            trigger={
+              <button
+                type="button"
+                className="rounded border border-neutral-700 bg-neutral-800 px-3 py-1.5 text-sm hover:bg-neutral-700"
+              >
+                + New policy
+              </button>
+            }
+          />
+        )}
       </div>
 
       <div className="mt-4 flex items-center gap-2">
@@ -119,6 +132,7 @@ export default async function PoliciesPage({
                 <span className="font-mono text-amber-200">
                   {t.schema}.{t.table}
                 </span>
+                {isAdmin && (
                 <form action={setTableRls}>
                   <input type="hidden" name="schema" value={t.schema} />
                   <input type="hidden" name="table" value={t.table} />
@@ -130,6 +144,7 @@ export default async function PoliciesPage({
                     Enable RLS
                   </button>
                 </form>
+                )}
               </li>
             ))}
           </ul>
@@ -203,6 +218,7 @@ export default async function PoliciesPage({
                       {p.check_expr ?? "—"}
                     </td>
                     <td className="px-3 py-2">
+                      {isAdmin && (
                       <div className="flex justify-end gap-3">
                         <PolicyModal
                           tables={allTables}
@@ -239,6 +255,7 @@ export default async function PoliciesPage({
                           <input type="hidden" name="name" value={p.name} />
                         </ConfirmDeleteForm>
                       </div>
+                      )}
                     </td>
                   </tr>
                 );
@@ -285,6 +302,7 @@ export default async function PoliciesPage({
                   {t.policy_count}
                 </td>
                 <td className="px-3 py-2">
+                  {isAdmin && (
                   <div className="flex justify-end gap-2">
                     {!t.rls_enabled && (
                       <form action={setTableRls} className="inline">
@@ -337,6 +355,7 @@ export default async function PoliciesPage({
                       </ConfirmDeleteForm>
                     )}
                   </div>
+                  )}
                 </td>
               </tr>
             ))}

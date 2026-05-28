@@ -1,5 +1,12 @@
 import { pool } from "@/lib/db";
 import { TablesSidebar, type TableEntry } from "./_components/TablesSidebar";
+import { getSession } from "@/lib/session";
+
+// System schemas enforce invariants (audit hash chain, AES-GCM env vars,
+// Argon2 password hashing). The dashboard hides them from read_only users
+// entirely — they have no business poking at audit rows or session tokens
+// even read-side. Admin and read_write can opt in via the sidebar toggle.
+const SYSTEM_SCHEMAS = new Set(["_dashboard", "auth"]);
 
 // Loads tables across every non-system schema in one shot. The sidebar
 // filters them client-side by the active `?schema=` param, so navigating
@@ -25,10 +32,18 @@ export default async function TablesLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const tables = await loadTables();
+  const session = await getSession();
+  const canViewSystemSchemas = session.role !== "read_only";
+  const allTables = await loadTables();
+  const tables = canViewSystemSchemas
+    ? allTables
+    : allTables.filter((t) => !SYSTEM_SCHEMAS.has(t.schema));
   return (
     <div className="flex min-h-screen">
-      <TablesSidebar tables={tables} />
+      <TablesSidebar
+        tables={tables}
+        canViewSystemSchemas={canViewSystemSchemas}
+      />
       <div className="flex-1 overflow-auto">{children}</div>
     </div>
   );
